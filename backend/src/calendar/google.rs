@@ -28,6 +28,20 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
     }
 
     async fn get_valid_access_token(&self) -> Result<String, CalendarProviderError> {
+        self.get_valid_access_token_inner(false).await
+    }
+
+    /// Force a refresh regardless of the stored expiry. Used to recover when
+    /// Google rejects the access token (401/403/404) even though the stored
+    /// expiry is still in the future — e.g. clock skew or a revoked token.
+    async fn force_refresh_access_token(&self) -> Result<String, CalendarProviderError> {
+        self.get_valid_access_token_inner(true).await
+    }
+
+    async fn get_valid_access_token_inner(
+        &self,
+        force: bool,
+    ) -> Result<String, CalendarProviderError> {
         let conn =
             match self.connection_id {
                 Some(id) => {
@@ -45,76 +59,78 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
         let conn = conn.ok_or(CalendarProviderError::MissingCredentials)?;
 
         let now = chrono::Utc::now();
-        if let Some(expires_at) = conn.expires_at {
-            if expires_at < now + chrono::Duration::minutes(2) {
-                let refresh_token = match conn.refresh_token_encrypted {
-                    Some(rt) => rt,
-                    None => {
-                        tracing::error!("google token expired and no refresh token stored");
-                        return Err(CalendarProviderError::TokenExpired);
-                    }
-                };
-                let decrypted = match encryption::decrypt(
-                    &refresh_token,
-                    crate::config::Config::from_env()?.token_encryption_key_or(),
-                ) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        tracing::error!(error = %e, "failed to decrypt refresh token");
-                        return Err(CalendarProviderError::Config(e));
-                    }
-                };
-                let token = match self
-                    .oauth
-                    .refresh_token(&decrypted)
-                    .await
-                {
-                    Ok(t) => t,
-                    Err(e) => {
-                        tracing::error!(error = %e, status = ?e.status(), "google refresh_token failed");
-                        return Err(CalendarProviderError::Network(e.to_string()));
-                    }
-                };
-
-                let expires_at = now + chrono::Duration::seconds(token.expires_in);
-                let new_access = match encryption::encrypt(
-                    &token.access_token,
-                    crate::config::Config::from_env()?.token_encryption_key_or(),
-                ) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        tracing::error!(error = %e, "failed to encrypt new access token");
-                        return Err(CalendarProviderError::Config(e));
-                    }
-                };
-                let new_refresh = match token.refresh_token.as_ref() {
-                    Some(r) => Some(encryption::encrypt(
-                        r,
-                        crate::config::Config::from_env()?.token_encryption_key_or(),
-                    )?),
-                    None => None,
-                };
-
-                match sqlx::query(
-                    "UPDATE calendar_connections SET access_token_encrypted = $1, refresh_token_encrypted = $2, expires_at = $3, updated_at = NOW() WHERE id = $4",
-                )
-                .bind(&new_access)
-                .bind(&new_refresh)
-                .bind(expires_at)
-                .bind(conn.id)
-                .execute(&self.pool)
-                .await
-                {
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::error!(error = %e, "failed to persist refreshed token");
-                        return Err(CalendarProviderError::Network(e.to_string()));
-                    }
+        let expired = match conn.expires_at {
+            Some(expires_at) => expires_at < now + chrono::Duration::minutes(2),
+            None => true,
+        };
+        if force || expired {
+            let refresh_token = match conn.refresh_token_encrypted {
+                Some(rt) => rt,
+                None => {
+                    tracing::error!("google token expired and no refresh token stored");
+                    return Err(CalendarProviderError::TokenExpired);
                 }
+            };
+            let decrypted = match encryption::decrypt(
+                &refresh_token,
+                crate::config::Config::from_env()?.token_encryption_key_or(),
+            ) {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to decrypt refresh token");
+                    return Err(CalendarProviderError::Config(e));
+                }
+            };
+            let token = match self
+                .oauth
+                .refresh_token(&decrypted)
+                .await
+            {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(error = %e, status = ?e.status(), "google refresh_token failed");
+                    return Err(CalendarProviderError::Network(e.to_string()));
+                }
+            };
 
-                tracing::info!("refreshed google token");
-                return Ok(token.access_token);
+            let expires_at = now + chrono::Duration::seconds(token.expires_in);
+            let new_access = match encryption::encrypt(
+                &token.access_token,
+                crate::config::Config::from_env()?.token_encryption_key_or(),
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to encrypt new access token");
+                    return Err(CalendarProviderError::Config(e));
+                }
+            };
+            let new_refresh = match token.refresh_token.as_ref() {
+                Some(r) => Some(encryption::encrypt(
+                    r,
+                    crate::config::Config::from_env()?.token_encryption_key_or(),
+                )?),
+                None => None,
+            };
+
+            match sqlx::query(
+                "UPDATE calendar_connections SET access_token_encrypted = $1, refresh_token_encrypted = $2, expires_at = $3, updated_at = NOW() WHERE id = $4",
+            )
+            .bind(&new_access)
+            .bind(&new_refresh)
+            .bind(expires_at)
+            .bind(conn.id)
+            .execute(&self.pool)
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to persist refreshed token");
+                    return Err(CalendarProviderError::Network(e.to_string()));
+                }
             }
+
+            tracing::info!("refreshed google token");
+            return Ok(token.access_token);
         }
 
         let decrypted = match encryption::decrypt(
@@ -222,14 +238,24 @@ impl<C: crate::calendar::models::GoogleOAuthClient> crate::calendar::provider::C
             tracing::error!(error = ?e, "get_valid_access_token failed");
             e
         })?;
-        let list = self
-            .oauth
-            .list_calendars(&access_token)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, status = ?e.status(), "google list_calendars failed");
-                CalendarProviderError::Network(e.to_string())
-            })?;
+        let list = match self.oauth.list_calendars(&access_token).await {
+            Ok(l) => l,
+            Err(e) if e.is_status() && e.status().map_or(false, |s| s.is_client_error()) => {
+                tracing::warn!(
+                    error = %e,
+                    "google list_calendars failed with client error, retrying after token refresh"
+                );
+                let token = self.force_refresh_access_token().await?;
+                self.oauth.list_calendars(&token).await.map_err(|e2| {
+                    tracing::error!(error = %e2, "google list_calendars failed after token refresh");
+                    CalendarProviderError::Network(e2.to_string())
+                })?
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "google list_calendars failed");
+                return Err(CalendarProviderError::Network(e.to_string()));
+            }
+        };
 
         let mut calendars = Vec::new();
         for item in list.items {
@@ -264,11 +290,31 @@ impl<C: crate::calendar::models::GoogleOAuthClient> crate::calendar::provider::C
         let access_token = self.get_valid_access_token().await?;
         let time_min = start.to_rfc3339();
         let time_max = end.to_rfc3339();
-        let list = self
+        let list = match self
             .oauth
             .list_events(&access_token, calendar_id, &time_min, &time_max)
             .await
-            .map_err(|e| CalendarProviderError::Network(e.to_string()))?;
+        {
+            Ok(l) => l,
+            Err(e) if e.is_status() && e.status().map_or(false, |s| s.is_client_error()) => {
+                tracing::warn!(
+                    error = %e,
+                    "google list_events failed with client error, retrying after token refresh"
+                );
+                let token = self.force_refresh_access_token().await?;
+                self.oauth
+                    .list_events(&token, calendar_id, &time_min, &time_max)
+                    .await
+                    .map_err(|e2| {
+                        tracing::error!(error = %e2, "google list_events failed after token refresh");
+                        CalendarProviderError::Network(e2.to_string())
+                    })?
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "google list_events failed");
+                return Err(CalendarProviderError::Network(e.to_string()));
+            }
+        };
 
         let mut events = Vec::new();
         for item in list.items {
