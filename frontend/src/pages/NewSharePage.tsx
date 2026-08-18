@@ -18,18 +18,30 @@ const EXPIRATION_OPTIONS = [
   { value: 'never', label: 'Never', ms: null },
 ] as const
 
-// Parse "YYYY-MM-DD" directly into a UTC Date. Avoid new Date(dateStr)
-// plus local-time getters: date-only strings parse as UTC midnight, but
-// .getDate()/.getMonth() run in local time and shift the day backward for
-// timezones behind UTC (e.g. US).
-function startOfDayUTC(dateStr: string): Date {
+// Build the start/end of a chosen "YYYY-MM-DD" as local midnight in the
+// calendar's timezone, then convert to UTC. Storing the instant as local
+// midnight (rather than UTC midnight) keeps the chosen calendar day aligned
+// with the owner's calendar: in a tz behind UTC, UTC midnight of Aug 16 is
+// still Aug 15 locally, which shifted every share a day early.
+function startOfDayUTC(dateStr: string, tz: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0))
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz || 'UTC',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(Date.UTC(y, m - 1, d, 12)))
+  const g = (t: string) => Number(parts.find((p) => p.type === t)!.value)
+  return new Date(Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')))
 }
 
-function endOfDayUTC(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59))
+function endOfDayUTC(dateStr: string, tz: string): Date {
+  const start = startOfDayUTC(dateStr, tz)
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000)
 }
 
 export default function NewSharePage() {
@@ -76,8 +88,8 @@ export default function NewSharePage() {
     if (!calendarId) { setError('Please select a calendar.'); return }
     if (!startDate || !endDate) { setError('Please choose a date range.'); return }
 
-    const start = startOfDayUTC(startDate)
-    const end = endOfDayUTC(endDate)
+    const start = startOfDayUTC(startDate, selectedCalendar?.timezone || 'UTC')
+    const end = endOfDayUTC(endDate, selectedCalendar?.timezone || 'UTC')
     if (start >= end) { setError('End date must be after start date.'); return }
 
     const exp = EXPIRATION_OPTIONS.find((o) => o.value === expiration)

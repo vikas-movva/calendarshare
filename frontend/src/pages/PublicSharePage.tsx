@@ -490,7 +490,7 @@ export default function PublicSharePage() {
             </span>
             <h2 className="font-semibold text-content">Polls</h2>
           </div>
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+          <div className="max-h-[70vh] space-y-4 pr-1">
             <AnimatePresence>
               {polls.map((poll) => {
                 const maxVotes = Math.max(...poll.slots.map((s: PollSlot) => s.votes.length), 0)
@@ -520,7 +520,7 @@ export default function PublicSharePage() {
                       </div>
                     </div>
 
-                    <div className="divide-y divide-border">
+                    <div className="divide-y divide-border overflow-y-auto max-h-[50vh]">
                       {sortedSlots.map((slot: PollSlot) => {
                         const voted = voter ? slot.votes.some((v) => v.email === voter.email) : false
                         const isWinner = slot.votes.length === maxVotes && maxVotes > 0
