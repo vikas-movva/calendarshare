@@ -1,0 +1,76 @@
+# render.yaml — CalendarShare
+#
+# One binary, one Postgres, one domain — all free on Render.
+#   - Web Service: free 0.5 vCPU / 256 MB RAM, auto-deploys on `git push`.
+#   - Managed Postgres: free 256 MB storage.
+#   - Custom domain + auto SSL (Let's Encrypt), free.
+#
+# Deploy from this directory with:
+#   render deploy --config render.yaml
+# Or link the repo in the Render dashboard and it auto-deploys on push.
+
+# ---------------------------------------------------------------------------
+# Web service — the Rust backend + compiled frontend in one origin
+# ---------------------------------------------------------------------------
+services:
+  - type: web
+    name: calendarshare
+    runtime: container
+    plan: free
+    region: oregon
+    buildCommand: |
+      cd backend
+      cargo build --release
+    startCommand: |
+      ./target/release/calendarshare
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: RUST_LOG
+        value: info
+      - key: FRONTEND_DIR
+        value: ./frontend/dist
+      - key: PUBLIC_BASE_URL
+        value: https://calendarshare.app
+      - key: GOOGLE_CLIENT_ID
+        # Set your production Client ID in the Render dashboard (never commit it).
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://calendarshare.app/auth/google/callback
+      - key: SESSION_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: DATABASE_URL
+        # Render injects the value from the database below automatically.
+        fromDatabase:
+          name: calendarshare-db
+    healthCheckPath: /health
+    # The backend serves the frontend, so there is no separate static site.
+
+# ---------------------------------------------------------------------------
+# Managed PostgreSQL — free 256 MB
+# ---------------------------------------------------------------------------
+databases:
+  - name: calendarshare-db
+    plan: free
+    region: oregon
+    postgresVersion: "16"
+    # Run migrations on every deploy.
+    # (Render has no direct "postStart"; the binary runs migrations at startup.)
+
+# ---------------------------------------------------------------------------
+# Custom domain + auto SSL
+# ---------------------------------------------------------------------------
+domains:
+  - calendarshare.app
+
+# ---------------------------------------------------------------------------
+# Persistent storage for any local state (none required for MVP)
+# ---------------------------------------------------------------------------
+disk:
+  - name: data
+    mountPath: /data
+    sizeGB: 1

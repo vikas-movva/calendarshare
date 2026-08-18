@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CalendarShare</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght=400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var mode = localStorage.getItem('calshare-theme-mode');
+          var accent = localStorage.getItem('calshare-theme-accent');
+          if (mode === 'light' || mode === 'dark') {
+            root.setAttribute('data-theme-mode', mode);
+          } else {
+            root.setAttribute('data-theme-mode', window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          }
+          if (accent && ['cyan', 'violet', 'emerald', 'amber', 'rose'].includes(accent)) {
+            root.setAttribute('data-theme', accent);
+          } else {
+            root.setAttribute('data-theme', 'violet');
+          }
+          // Injected BEFORE the Tailwind CSS so Tailwind (later in source order)
+          // overrides it once it loads. Prevents a flash of default browser
+          // chrome before Vite injects the compiled CSS.
+          var isLight = root.getAttribute('data-theme-mode') === 'light';
+          var bg = isLight ? '#e2e8f0' : '#0a0a1a';
+          var text = isLight ? '#0f172a' : '#e2e8f0';
+          var style = document.createElement('style');
+          style.textContent =
+            'html,body{background-color:' + bg + ';color:' + text + ';}';
+          document.head.insertBefore(style, document.head.firstChild);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
