@@ -193,7 +193,7 @@ pub async fn public_share(
         })?
         .ok_or(AppError::ShareNotFound)?;
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &share.user_id.to_string())
+    let user = crate::db::queries::get_user_by_id(&state.pool, share.user_id)
         .await?
         .ok_or(AppError::InternalError("owner not found".into()))?;
 
@@ -276,7 +276,7 @@ async fn authenticate(
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0])
+    let user = crate::db::queries::get_user_by_id(&state.pool, user_id)
         .await?
         .ok_or(AppError::AuthError("user not found".into()))?;
 

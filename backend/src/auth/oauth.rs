@@ -268,7 +268,7 @@ pub async fn me(
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0])
+    let user = crate::db::queries::get_user_by_id(&state.pool, user_id)
         .await?
         .ok_or(AppError::AuthError("user not found".into()))?;
 

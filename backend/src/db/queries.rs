@@ -6,11 +6,22 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateE
 }
 
 pub async fn get_user_by_email(
-    pool: &PgPool,
+    pool: &crate::db::PgPool,
     email: &str,
 ) -> sqlx::Result<Option<crate::users::User>> {
     let row = sqlx::query_as::<_, crate::users::User>("SELECT * FROM users WHERE email = $1")
         .bind(email)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row)
+}
+
+pub async fn get_user_by_id(
+    pool: &crate::db::PgPool,
+    user_id: uuid::Uuid,
+) -> sqlx::Result<Option<crate::users::User>> {
+    let row = sqlx::query_as::<_, crate::users::User>("SELECT * FROM users WHERE id = $1")
+        .bind(user_id)
         .fetch_optional(pool)
         .await?;
     Ok(row)
