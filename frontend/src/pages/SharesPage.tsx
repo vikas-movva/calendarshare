@@ -158,7 +158,7 @@ export default function SharesPage() {
   const { data, isLoading } = useShares()
   const revoke = useRevokeShare()
   const [toast, setToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null)
-  const shares = data?.shares || []
+  const shares = sortShares(data?.shares || [])
 
   const showToast = useCallback((msg: string, kind: 'ok' | 'err' = 'ok') => {
     setToast({ text: msg, kind })
@@ -277,6 +277,23 @@ export default function SharesPage() {
       )}
     </div>
   )
+}
+
+const STATUS_ORDER: Record<'active' | 'expired' | 'revoked', number> = {
+  active: 0,
+  expired: 1,
+  revoked: 2,
+}
+
+function sortShares<T extends { start_time: string; revoked_at: string | null; expires_at: string | null }>(list: T[]) {
+  return [...list].sort((a, b) => {
+    const sa = a.revoked_at ? 'revoked' : isExpired(a) ? 'expired' : 'active'
+    const sb = b.revoked_at ? 'revoked' : isExpired(b) ? 'expired' : 'active'
+    const pa = STATUS_ORDER[sa]
+    const pb = STATUS_ORDER[sb]
+    if (pa !== pb) return pa - pb
+    return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+  })
 }
 
 function CalendarMini() {
