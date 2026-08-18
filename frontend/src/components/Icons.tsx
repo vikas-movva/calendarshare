@@ -183,3 +183,36 @@ export function XSmall() {
     </svg>
   );
 }
+
+export function CopyrightSmall({ className }: { className?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4h3m-3 4h1.5a2.5 2.5 0 0 0 0-5H12v2" />
+    </svg>
+  );
+}
+
+export function GithubSmall({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M12 .5C5.65.5 0 6.15 0 13.2c0 5.6 3.7 10.3 8.8 12 .7.1.96-.3.96-.7v-2.6c-3.6.8-4.35-1.7-4.35-1.7-.6-1.5-1.4-1.9-1.4-1.9-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.9 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .4.26.9.97.7C20.3 23.5 24 18.8 24 13.2 24 6.15 18.35.5 12 .5z" />
+    </svg>
+  );
+}
+
+export function TwitterSmall({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M18.9 2H22l-7.1 8.1L23 22h-6.4l-5-6.5L6.6 22H3.3l7.6-8.7L1 2h6.5l4.5 6 5.2-6zm-1.1 18h1.8L7.4 4H5.5l12.3 16z" />
+    </svg>
+  );
+}
+
+export function LinkedInSmall({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M4.98 3.5A2.5 2.5 0 1 1 0 3.5a2.5 2.5 0 0 1 4.98 0zM.4 8h4.2v13H.4V8zM8 8h4v1.8h.1c.5-1 1.8-2 3.7-2 4 0 4.7 2.6 4.7 6V21h-4v-5.7c0-1.4 0-3.2-2-3.2s-2.3 1.5-2.3 3.1V21H8V8z" />
+    </svg>
+  );
+}

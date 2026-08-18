@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMe } from '../hooks/queries'
 import ThemeControls from '../components/ThemeControls'
-import { CalendarSmall, LogOutSmall, PersonSmall, ShareSmall } from '../components/Icons'
+import { CalendarSmall, LogOutSmall, PersonSmall, ShareSmall, GithubSmall, TwitterSmall, LinkedInSmall, CalendarGridSmall} from '../components/Icons'
 import { useState } from 'react'
 
 function PageTransition() {
@@ -131,7 +131,63 @@ export default function AppLayout() {
         <PageTransition />
       </main>
       <footer className="mx-auto max-w-7xl px-4 pb-10 pt-2 text-center text-xs text-content-faint sm:px-6">
-        Your shared link shows only the events you selected — never your full calendar.
+        <p>Your shared link shows only the events you selected — never your full calendar.</p>
+        <p className="mt-1.5">
+          <span className="text-content-soft">React · Tailwind</span>
+          {' · '}
+          <span className="text-content-soft">Axum · Tokio</span>
+          {' · '}
+          <span className="text-content-soft">PostgreSQL</span>
+        </p>
+        <p className="mt-1.5">
+          Built with ♥ by{' '}
+          <a href="https://vikas-movva.github.io/portfolio" target="_blank" rel="noopener" className="text-content-soft hover:text-accent transition-colors">
+            Vikas Movva
+          </a>
+        </p>
+
+        <p className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+          <a
+            href="https://github.com/vikas-movva/CalenderShare"
+            target="_blank"
+            rel="noopener"
+            aria-label="GitHub repository"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-soft transition-colors hover:bg-card hover:text-accent"
+          >
+            <CalendarGridSmall />
+          </a>
+          <a
+            href="https://github.com/vikas-movva"
+            target="_blank"
+            rel="noopener"
+            aria-label="GitHub profile"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-soft transition-colors hover:bg-card hover:text-accent"
+          >
+            <GithubSmall />
+          </a>
+          <a
+            href="https://twitter.com/vikasmovva"
+            target="_blank"
+            rel="noopener"
+            aria-label="Twitter"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-soft transition-colors hover:bg-card hover:text-accent"
+          >
+            <TwitterSmall />
+          </a>
+          <a
+            href="https://linkedin.com/in/vikas-movva"
+            target="_blank"
+            rel="noopener"
+            aria-label="LinkedIn"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-soft transition-colors hover:bg-card hover:text-accent"
+          >
+            <LinkedInSmall />
+          </a>
+        </p>
+
+        <p className="mt-1.5 flex items-center justify-center gap-1.5">
+          © {new Date().getFullYear()} Vikas Movva
+        </p>
       </footer>
     </div>
   )
