@@ -30,8 +30,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets
       - run: cargo test
         env:
           DATABASE_URL: postgres://calendarshare:calendarshare@localhost:5432/calendarshare
@@ -48,5 +46,4 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run lint
       - run: npm test

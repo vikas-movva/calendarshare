@@ -1,7 +1,8 @@
 import { useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { usePublicShare } from '../hooks/queries'
-import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall } from '../components/Icons'
+import type { PublicEvent } from '../types/api'
+import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, XSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
 import { stagger, slideRight } from '../theme/anim'
 
@@ -13,6 +14,10 @@ function formatEventTime(iso: string, isAllDay?: boolean): string {
   if (isAllDay) return date
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return `${date} · ${time}`
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 function startOfDay(d: Date) {
@@ -75,6 +80,7 @@ export default function PublicSharePage() {
   const { token = '' } = useParams()
   const { data, isLoading, error } = usePublicShare(token)
   const [view, setView] = useState<View>('list')
+  const [selected, setSelected] = useState<PublicEvent | null>(null)
 
   if (isLoading) {
     return <div className="card p-8 text-center text-content-muted">Loading…</div>
@@ -151,13 +157,7 @@ export default function PublicSharePage() {
               )}
             </motion.div>
           ) : (
-            <motion.div
-              key="calendar"
-              variants={stagger}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-7 gap-px overflow-hidden bg-border text-xs"
-            >
+            <div key="calendar" className="grid grid-cols-7 gap-px overflow-hidden bg-border text-xs">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                 <div key={d} className="bg-surface px-2 py-1.5 text-center text-xs font-medium text-content-faint">
                   {d}
@@ -167,32 +167,84 @@ export default function PublicSharePage() {
                 const key = dayKey(day)
                 const dayEvents = data.events.filter((ev) => sameDay(new Date(ev.start_time), day))
                 return (
-                  <motion.div
-                    key={key}
-                    variants={slideRight}
-                    className="min-h-[96px] bg-surface p-1.5"
-                  >
+                  <div key={key} className="min-h-[96px] bg-surface p-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-content-muted">{day.getDate()}</span>
                     </div>
                     <div className="mt-1 space-y-1">
                       {dayEvents.slice(0, 3).map((ev, i) => (
-                        <div
+                        <button
                           key={i}
-                          className="truncate rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent"
+                          type="button"
+                          onClick={() => setSelected(ev)}
+                          className="w-full truncate rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent hover:bg-accent/25"
                           title={formatEventTime(ev.start_time, ev.is_all_day)}
                         >
-                          {ev.is_all_day ? 'All day' : new Date(ev.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                          {ev.is_all_day ? 'All day' : formatTime(ev.start_time)}
                           {ev.title ? ` · ${ev.title}` : ''}
-                        </div>
+                        </button>
                       ))}
                       {dayEvents.length > 3 && (
-                        <div className="px-1.5 text-[11px] text-content-faint">+{dayEvents.length - 3} more</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelected(dayEvents[0])}
+                          className="px-1.5 text-[11px] text-content-faint hover:text-content"
+                        >
+                          +{dayEvents.length - 3} more
+                        </button>
                       )}
                     </div>
-                  </motion.div>
+                  </div>
                 )
               })}
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {selected && (
+            <motion.div
+              key="backdrop"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelected(null)}
+            >
+              <motion.div
+                className="card w-full max-w-sm overflow-hidden"
+                initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                  <span className="text-xs text-content-faint">
+                    {formatEventTime(selected.start_time, selected.is_all_day)} –{' '}
+                    {formatEventTime(selected.end_time, selected.is_all_day)}
+                  </span>
+                  <button
+                    onClick={() => setSelected(null)}
+                    className="grid h-7 w-7 place-items-center rounded-lg text-content-muted hover:bg-card"
+                    aria-label="Close"
+                  >
+                    <XSmall />
+                  </button>
+                </div>
+                <div className="p-4">
+                  <p className="font-semibold text-content">{selected.title || '(busy)'}</p>
+                  {selected.location && (
+                    <p className="mt-2 text-sm text-content-muted">📍 {selected.location}</p>
+                  )}
+                  {selected.description && (
+                    <p className="mt-2 text-sm text-content-muted">{selected.description}</p>
+                  )}
+                  {!selected.title && !selected.location && !selected.description && (
+                    <p className="mt-2 text-sm text-content-faint">No details shared.</p>
+                  )}
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
