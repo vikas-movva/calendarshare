@@ -2,7 +2,8 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMe } from '../hooks/queries'
 import ThemeControls from '../components/ThemeControls'
-import { CalendarSmall } from '../components/Icons'
+import { CalendarSmall, LogOutSmall, PersonSmall, ShareSmall } from '../components/Icons'
+import { useState } from 'react'
 
 function PageTransition() {
   const location = useLocation()
@@ -24,6 +25,62 @@ function PageTransition() {
         <Outlet />
       </motion.div>
     </AnimatePresence>
+  )
+}
+
+function ProfileMenu() {
+  const [open, setOpen] = useState(false)
+  const { data: user } = useMe()
+  const initials = (user?.display_name || user?.email || '?').slice(0, 1).toUpperCase()
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="flex items-center gap-2 rounded-xl ring-2 ring-surface"
+        aria-label="Profile menu"
+      >
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt="" className="h-8 w-8 rounded-full" />
+        ) : (
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-accent/10 text-accent text-xs font-bold">
+            {initials}
+          </div>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <div className="border-b border-border px-4 py-3">
+            <p className="truncate text-sm font-semibold text-content">
+              {user?.display_name || user?.email}
+            </p>
+            {user?.display_name && (
+              <p className="truncate text-xs text-content-faint">{user.email}</p>
+            )}
+          </div>
+          <Link
+            to="/shares"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-content-muted hover:bg-card"
+          >
+            <ShareSmall />
+            Shares
+          </Link>
+          <button
+            onClick={() => (window.location.href = '/auth/logout')}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-content-muted hover:bg-card"
+          >
+            <LogOutSmall />
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -53,30 +110,14 @@ export default function AppLayout() {
                 >
                   Dashboard
                 </Link>
-                <Link
-                  to="/shares"
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-content-muted hover:bg-card"
-                >
-                  Shares
-                </Link>
-                <div className="ml-2 flex items-center gap-2">
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt="" className="h-8 w-8 rounded-full ring-2 ring-surface" />
-                  ) : (
-                    <div className="grid h-8 w-8 place-items-center rounded-full bg-accent/10 text-accent text-xs font-bold">
-                      {(user.display_name || user.email || '?').slice(0, 1).toUpperCase()}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => (window.location.href = '/auth/logout')}
-                    className="hidden text-sm font-medium text-content-muted hover:text-content sm:inline"
-                  >
-                    Sign out
-                  </button>
-                </div>
+                <ProfileMenu />
               </>
             ) : (
-              <button onClick={() => (window.location.href = '/auth/login')} className="px-4 py-2 rounded-xl bg-accent text-on-accent font-semibold text-sm hover:bg-accent-hover transition-colors">
+              <button
+                onClick={() => (window.location.href = '/auth/login')}
+                className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-on-accent font-semibold text-sm hover:bg-accent-hover transition-colors"
+              >
+                <PersonSmall />
                 Sign in
               </button>
             )}
