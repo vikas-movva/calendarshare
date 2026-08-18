@@ -196,7 +196,7 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
     ) -> Result<GoogleCalendarList, reqwest::Error> {
         let resp = self
             .http
-            .get("https://www.googleapis.com/calendar/v3/users/me/calendarlist")
+            .get("https://www.googleapis.com/calendar/v3/users/me/calendarList")
             .bearer_auth(access_token)
             .send()
             .await?;
