@@ -1,12 +1,18 @@
-import { useShares, useRevokeShare } from '../hooks/queries'
+import { useMe, useShares, useRevokeShare } from '../hooks/queries'
 import { CopySmall, TrashSmall, EyeSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger, slideRight } from '../theme/anim'
 
 export default function SharesPage() {
+  const { data: user, isLoading: meLoading } = useMe()
   const { data, isLoading } = useShares()
   const revoke = useRevokeShare()
   const shares = data?.shares || []
+
+  if (!meLoading && !user) {
+    window.location.href = '/auth/login'
+    return null
+  }
 
   async function handleCopy(s: { id: string }) {
     try {

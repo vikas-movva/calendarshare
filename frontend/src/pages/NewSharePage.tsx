@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useCalendars, useCreateShare } from '../hooks/queries'
+import { useMe, useCalendars, useCreateShare } from '../hooks/queries'
 import { CalendarSmall, CopySmall, ArrowLeftSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '../theme/anim'
@@ -28,8 +28,14 @@ function endOfDayUTC(d: Date) {
 
 export default function NewSharePage() {
   const navigate = useNavigate()
+  const { data: user, isLoading: meLoading } = useMe()
   const { data: calendars } = useCalendars()
   const createShare = useCreateShare()
+
+  if (!meLoading && !user) {
+    window.location.href = '/auth/login'
+    return null
+  }
 
   const [calendarId, setCalendarId] = useState<string>('')
   const [startDate, setStartDate] = useState('')
