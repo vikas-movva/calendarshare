@@ -57,12 +57,63 @@ export interface PublicEvent {
   is_all_day: boolean;
 }
 
+export interface FreeSlot {
+  start: string;
+  end: string;
+}
+
+export interface FreeSlotsResponse {
+  slots: FreeSlot[];
+}
+
+export interface PublicShareContributor {
+  user_id: string;
+  display_name: string | null;
+  calendars: { calendar_id: string; name: string }[];
+}
+
+export interface PollSlot {
+  id: string;
+  poll_id: string;
+  start: string;
+  end: string;
+  votes: PollVote[];
+}
+
+export interface PollVote {
+  id: string;
+  user_id: string;
+  email: string;
+  display_name: string | null;
+}
+
+export interface Poll {
+  id: string;
+  share_id: string;
+  title: string | null;
+  slots: PollSlot[];
+}
+
+export interface CreatePollRequest {
+  share_id: string;
+  title: string | null;
+}
+
+export interface CreatePollResponse {
+  id: string;
+  share_id: string;
+  title: string | null;
+  slots: { id: string; start: string; end: string }[];
+}
+
 export interface PublicShareResponse {
   owner: { display_name: string | null };
   range: { start: string; end: string };
   timezone: string;
   visibility: "busy" | "title_time" | "details";
   events: PublicEvent[];
+  contributors: PublicShareContributor[];
+  polls: Poll[];
 }
 
 export interface MeResponse {

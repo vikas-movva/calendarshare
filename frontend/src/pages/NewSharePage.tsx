@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useMe, useCalendars, useCreateShare } from '../hooks/queries'
-import { CalendarSmall, CopySmall, ArrowLeftSmall } from '../components/Icons'
+import { useMe, useCalendars, useCreateShare, useCreatePoll } from '../hooks/queries'
+import { CalendarSmall, CopySmall, ArrowLeftSmall, PollSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '../theme/anim'
 
@@ -32,6 +32,7 @@ export default function NewSharePage() {
   const { data: user, isLoading: meLoading } = useMe()
   const { data: calendars } = useCalendars()
   const createShare = useCreateShare()
+  const createPoll = useCreatePoll()
 
   const calendarsList = useMemo(() => calendars?.calendars || [], [calendars])
   const [calendarId, setCalendarId] = useState<string>('')
@@ -49,7 +50,11 @@ export default function NewSharePage() {
   const [visibility, setVisibility] = useState<'busy' | 'title_time' | 'details'>('title_time')
   const [expiration, setExpiration] = useState('7d')
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ url: string } | null>(null)
+  const [result, setResult] = useState<{ url: string; id: string } | null>(null)
+  const [pollTitle, setPollTitle] = useState('')
+  const [creatingPoll, setCreatingPoll] = useState(false)
+  const [pollError, setPollError] = useState<string | null>(null)
+  const [pollSuccess, setPollSuccess] = useState(false)
 
   if (!meLoading && !user) {
     window.location.href = '/auth/login'
@@ -81,9 +86,24 @@ export default function NewSharePage() {
         expires_at,
         timezone: selectedCalendar?.timezone || undefined,
       })
-      setResult({ url: res.url })
+      setResult({ url: res.url, id: res.id })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create share.')
+    }
+  }
+
+  const handleCreatePoll = async () => {
+    if (!result) return
+    setPollError(null)
+    setCreatingPoll(true)
+    try {
+      await createPoll.mutateAsync({ shareId: result.id, title: pollTitle.trim() || null })
+      setPollSuccess(true)
+      setPollTitle('')
+    } catch (err) {
+      setPollError(err instanceof Error ? err.message : 'Could not create poll.')
+    } finally {
+      setCreatingPoll(false)
     }
   }
 
@@ -112,6 +132,41 @@ export default function NewSharePage() {
                 <CopySmall />
               </button>
             </div>
+
+            <div className="mt-5 rounded-lg border border-border bg-surface-alt/40 p-4">
+              <div className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
+                  <PollSmall />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-content">Add a poll</p>
+                  <p className="text-xs text-content-faint">Friends vote on the free times we compute.</p>
+                </div>
+              </div>
+              {pollSuccess ? (
+                <p className="mt-3 text-sm text-green-400">Poll created!</p>
+              ) : (
+                <>
+                  <input
+                    value={pollTitle}
+                    onChange={(e) => setPollTitle(e.target.value)}
+                    placeholder="e.g. Lunch this week? (optional)"
+                    className="mt-3 block w-full rounded-lg border border-border bg-field px-3 py-2 text-sm text-content focus:border-accent focus:ring-3 focus:ring-accent/20 focus:outline-none"
+                  />
+                  {pollError && (
+                    <p className="mt-2 text-sm text-red-400">{pollError}</p>
+                  )}
+                  <button
+                    onClick={handleCreatePoll}
+                    disabled={creatingPoll}
+                    className="btn-primary mt-3 w-full"
+                  >
+                    {creatingPoll ? 'Creating…' : 'Create poll'}
+                  </button>
+                </>
+              )}
+            </div>
+
             <div className="mt-5 flex flex-wrap gap-2">
               <a href={result.url} target="_blank" rel="noreferrer" className="btn-primary">Open share</a>
               <button onClick={() => navigate('/shares')} className="btn-ghost">
@@ -157,6 +212,9 @@ export default function NewSharePage() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            <p className="mt-1.5 text-xs text-content-faint">
+              Logged-in users can add their own calendars to the same date range later — the free times are recomputed from the merged busy schedule.
+            </p>
           </motion.div>
 
           <motion.div variants={fadeUp}>

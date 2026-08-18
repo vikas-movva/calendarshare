@@ -5,5 +5,6 @@ pub mod db;
 pub mod encryption;
 pub mod error;
 pub mod middleware;
+pub mod polls;
 pub mod shares;
 pub mod users;

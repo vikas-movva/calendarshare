@@ -2,6 +2,32 @@ use uuid::Uuid;
 
 use crate::polls::models::{Poll, PollSlot, PollVote};
 
+/// Stable per-email UUID used as the voter identifier for non-registered
+/// voters. It is deterministic so re-voting with the same email maps to the
+/// same user_id row.
+pub fn user_id_for_email_deterministic(email: &str) -> Uuid {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(email.as_bytes());
+    let hash = hasher.finalize();
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash[..16]);
+    // Set version 4 variant bits so the UUID is recognizable but stable.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
+pub async fn user_id_for_email(pool: &crate::db::PgPool, email: &str) -> sqlx::Result<Uuid> {
+    // Reuse a registered user's id if one matches this email, otherwise
+    // synthesize a stable UUID so the vote row is keyed consistently.
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
+    Ok(existing.unwrap_or_else(|| user_id_for_email_deterministic(email)))
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PollRow {
     pub id: Uuid,
@@ -50,12 +76,12 @@ impl PollRow {
             .map(|s| PollSlot {
                 id: s.id,
                 poll_id: s.poll_id,
-                start_time: s.start_time,
-                end_time: s.end_time,
+                start: s.start_time,
+                end: s.end_time,
                 votes: slots_map.get(&s.id).cloned().unwrap_or_default(),
             })
             .collect();
-        slots.sort_by_key(|s| s.start_time);
+        slots.sort_by_key(|s| s.start);
 
         Poll {
             id: self.id,
@@ -128,12 +154,10 @@ pub async fn get_poll_by_id(
     pool: &crate::db::PgPool,
     poll_id: Uuid,
 ) -> sqlx::Result<Option<PollRow>> {
-    let row = sqlx::query_as::<_, PollRow>(
-        "SELECT * FROM polls WHERE id = $1",
-    )
-    .bind(poll_id)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query_as::<_, PollRow>("SELECT * FROM polls WHERE id = $1")
+        .bind(poll_id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row)
 }
 
@@ -203,12 +227,10 @@ pub async fn delete_poll_vote(
     slot_id: Uuid,
     user_id: Uuid,
 ) -> sqlx::Result<bool> {
-    let res = sqlx::query(
-        "DELETE FROM poll_votes WHERE slot_id = $1 AND user_id = $2",
-    )
-    .bind(slot_id)
-    .bind(user_id)
-    .execute(pool)
-    .await?;
+    let res = sqlx::query("DELETE FROM poll_votes WHERE slot_id = $1 AND user_id = $2")
+        .bind(slot_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
     Ok(res.rows_affected() > 0)
 }

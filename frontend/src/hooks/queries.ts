@@ -54,3 +54,71 @@ export function usePublicShare(token: string) {
     retry: false,
   });
 }
+
+export function useFreeSlots(shareId: string | null) {
+  return useQuery({
+    queryKey: ["free-slots", shareId],
+    queryFn: () => api.freeSlots(shareId!),
+    enabled: !!shareId,
+  });
+}
+
+export function usePublicFreeSlots(token: string) {
+  return useQuery({
+    queryKey: ["free-slots", "public", token],
+    queryFn: () => api.publicFreeSlots(token),
+    retry: false,
+  });
+}
+
+export function useAddContributor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ shareId, token, calendarId }: { shareId?: string; token?: string; calendarId: string }) =>
+      token ? api.addContributorByToken(token, calendarId) : api.addContributor(shareId!, calendarId),
+    onSuccess: (_data, { shareId, token }) => {
+      if (token) {
+        qc.invalidateQueries({ queryKey: ["public", token] });
+        qc.invalidateQueries({ queryKey: ["free-slots", "public", token] });
+      } else if (shareId) {
+        qc.invalidateQueries({ queryKey: ["free-slots", shareId] });
+      }
+    },
+  });
+}
+
+export function useCreatePoll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { shareId: string; title: string | null }) =>
+      api.createPoll({ share_id: body.shareId, title: body.title }),
+    onSuccess: (_data, { shareId }) => {
+      qc.invalidateQueries({ queryKey: ["polls", shareId] });
+    },
+  });
+}
+
+export function useListPolls(shareId: string | null) {
+  return useQuery({
+    queryKey: ["polls", shareId],
+    queryFn: () => api.listPolls(shareId!),
+    enabled: !!shareId,
+  });
+}
+
+export function useVoteSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, email, displayName }: { slotId: string; email: string; displayName: string | null }) =>
+      api.vote(slotId, email, displayName),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["public"] }),
+  });
+}
+
+export function useUnvoteSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, email }: { slotId: string; email: string }) => api.unvote(slotId, email),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["public"] }),
+  });
+}

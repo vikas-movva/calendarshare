@@ -264,6 +264,18 @@ pub async fn revoke_share(
     Ok(row)
 }
 
+pub async fn get_share_by_id(
+    pool: &PgPool,
+    share_id: Uuid,
+) -> sqlx::Result<Option<crate::shares::models::Share>> {
+    let row =
+        sqlx::query_as::<_, crate::shares::models::Share>("SELECT * FROM shares WHERE id = $1")
+            .bind(share_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row)
+}
+
 pub async fn list_share_events(
     pool: &PgPool,
     share_id: Uuid,
@@ -272,6 +284,60 @@ pub async fn list_share_events(
         "SELECT * FROM share_events WHERE share_id = $1 ORDER BY start_time",
     )
     .bind(share_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn list_share_contributors(
+    pool: &PgPool,
+    share_id: Uuid,
+) -> sqlx::Result<Vec<crate::shares::models::ShareContributor>> {
+    let rows = sqlx::query_as::<_, crate::shares::models::ShareContributor>(
+        "SELECT * FROM share_contributors WHERE share_id = $1 ORDER BY created_at",
+    )
+    .bind(share_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+pub async fn add_share_contributor(
+    pool: &PgPool,
+    share_id: Uuid,
+    user_id: Uuid,
+    calendar_id: Uuid,
+) -> sqlx::Result<Option<crate::shares::models::ShareContributor>> {
+    let row = sqlx::query_as::<_, crate::shares::models::ShareContributor>(
+        r#"
+        INSERT INTO share_contributors (id, share_id, user_id, calendar_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (share_id, user_id, calendar_id) DO UPDATE SET id = EXCLUDED.id
+        RETURNING *
+        "#,
+    )
+    .bind(Uuid::new_v4())
+    .bind(share_id)
+    .bind(user_id)
+    .bind(calendar_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+pub async fn list_contributor_calendars(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> sqlx::Result<Vec<crate::calendar::models::Calendar>> {
+    let rows = sqlx::query_as::<_, crate::calendar::models::Calendar>(
+        r#"
+        SELECT c.* FROM calendars c
+        JOIN calendar_connections cc ON cc.id = c.connection_id
+        WHERE cc.user_id = $1
+        ORDER BY c.name
+        "#,
+    )
+    .bind(user_id)
     .fetch_all(pool)
     .await?;
     Ok(rows)

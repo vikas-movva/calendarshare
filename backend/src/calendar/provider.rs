@@ -13,6 +13,21 @@ pub enum CalendarProviderError {
     Config(String),
 }
 
+impl std::fmt::Display for CalendarProviderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CalendarProviderError::MissingCredentials => write!(f, "missing credentials"),
+            CalendarProviderError::ProviderError(e) => write!(f, "provider error: {}", e),
+            CalendarProviderError::TokenExpired => write!(f, "token expired"),
+            CalendarProviderError::Network(e) => write!(f, "network error: {}", e),
+            CalendarProviderError::Database(e) => write!(f, "database error: {}", e),
+            CalendarProviderError::Config(e) => write!(f, "config error: {:?}", e),
+        }
+    }
+}
+
+impl std::error::Error for CalendarProviderError {}
+
 impl From<String> for CalendarProviderError {
     fn from(err: String) -> Self {
         CalendarProviderError::ProviderError(err)

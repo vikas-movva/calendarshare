@@ -4,6 +4,7 @@ import LandingPage from '../pages/LandingPage'
 import DashboardPage from '../pages/DashboardPage'
 import NewSharePage from '../pages/NewSharePage'
 import SharesPage from '../pages/SharesPage'
+import PollsPage from '../pages/PollsPage'
 import PublicSharePage from '../pages/PublicSharePage'
 import HowPage from '../pages/HowPage'
 
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'shares/new', element: <NewSharePage /> },
       { path: 'shares', element: <SharesPage /> },
+      { path: 'polls/:shareId', element: <PollsPage /> },
       { path: 's/:token', element: <PublicSharePage /> },
     ],
   },

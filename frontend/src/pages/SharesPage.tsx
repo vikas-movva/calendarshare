@@ -1,5 +1,6 @@
 import { useMe, useShares, useRevokeShare } from '../hooks/queries'
-import { CopySmall, TrashSmall, EyeSmall, CheckSmall } from '../components/Icons'
+import { CopySmall, TrashSmall, EyeSmall, CheckSmall, PollSmall } from '../components/Icons'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp, stagger, slideRight } from '../theme/anim'
 import { useState, useEffect, useCallback } from 'react'
@@ -259,6 +260,13 @@ export default function SharesPage() {
                         </span>
                       )
                     )}
+                    <Link
+                      to={`/polls/${s.id}`}
+                      title="Manage polls"
+                      className="grid h-8 w-8 place-items-center rounded-lg border border-border text-content-muted hover:bg-accent/10 hover:text-accent"
+                    >
+                      <PollSmall />
+                    </Link>
                     <CopyButton s={s} status={status} onCopied={() => showToast('Link copied!')} onError={() => showToast(status === 'revoked' ? 'Link has been revoked' : status === 'expired' ? 'Link has expired' : 'Could not copy link', 'err')} />
                     <button
                       onClick={() => handleRevoke(s)}

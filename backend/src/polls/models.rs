@@ -15,8 +15,8 @@ pub struct Poll {
 pub struct PollSlot {
     pub id: Uuid,
     pub poll_id: Uuid,
-    pub start_time: DateTime<chrono::Utc>,
-    pub end_time: DateTime<chrono::Utc>,
+    pub start: DateTime<chrono::Utc>,
+    pub end: DateTime<chrono::Utc>,
     pub votes: Vec<PollVote>,
 }
 

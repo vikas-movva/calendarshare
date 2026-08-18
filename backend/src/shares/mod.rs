@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crate::calendar::models::CalendarEvent;
 
 pub use models::{
-    NewShare, NewShareEvent, OwnerInfo, PublicEvent, PublicShareResponse, Share, ShareEvent,
-    ShareRange, Visibility,
+    FreeSlot, NewShare, NewShareEvent, OwnerInfo, PublicEvent, PublicShareResponse, Share,
+    ShareContributor, ShareContributorInfo, ShareEvent, ShareRange, Visibility,
 };
 
 pub use service::{RealTokenService, ShareService, TokenService};

@@ -27,9 +27,9 @@ impl PollService {
     }
 
     pub async fn get_poll(&self, poll_id: Uuid) -> crate::polls::AppErrorResult<Poll> {
-        let row = store::get_poll_by_id(&self.pool, poll_id)
-            .await?
-            .ok_or(crate::error::AppError::InternalError("poll not found".into()))?;
+        let row = store::get_poll_by_id(&self.pool, poll_id).await?.ok_or(
+            crate::error::AppError::InternalError("poll not found".into()),
+        )?;
         let slots = store::list_poll_slots(&self.pool, row.id).await?;
         let votes = store::list_poll_votes(&self.pool, row.id).await?;
         Ok(row.into_poll(slots, votes))
@@ -60,10 +60,12 @@ impl PollService {
         let poll_id = self.get_poll_id_for_slot(slot_id).await?;
         let rows = store::list_poll_slots(&self.pool, poll_id).await?;
         let votes = store::list_poll_votes(&self.pool, poll_id).await?;
-        let target = rows
-            .iter()
-            .find(|r| r.id == slot_id)
-            .ok_or(crate::error::AppError::InternalError("slot not found".into()))?;
+        let target =
+            rows.iter()
+                .find(|r| r.id == slot_id)
+                .ok_or(crate::error::AppError::InternalError(
+                    "slot not found".into(),
+                ))?;
         let votes_for_slot: Vec<PollVote> = votes
             .iter()
             .filter(|v| v.slot_id == slot_id)
@@ -79,33 +81,26 @@ impl PollService {
         Ok(PollSlot {
             id: target.id,
             poll_id: target.poll_id,
-            start_time: target.start_time,
-            end_time: target.end_time,
+            start: target.start_time,
+            end: target.end_time,
             votes: votes_for_slot,
         })
     }
 
-    pub async fn unvote(
-        &self,
-        slot_id: Uuid,
-        user_id: Uuid,
-    ) -> crate::polls::AppErrorResult<bool> {
+    pub async fn unvote(&self, slot_id: Uuid, user_id: Uuid) -> crate::polls::AppErrorResult<bool> {
         store::delete_poll_vote(&self.pool, slot_id, user_id)
             .await
             .map_err(|e| crate::error::AppError::InternalError(e.to_string()))
     }
 
-    async fn get_poll_id_for_slot(
-        &self,
-        slot_id: Uuid,
-    ) -> crate::polls::AppErrorResult<Uuid> {
-        let row: Option<Uuid> = sqlx::query_scalar(
-            "SELECT poll_id FROM poll_slots WHERE id = $1",
-        )
-        .bind(slot_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
-        row.ok_or(crate::error::AppError::InternalError("slot not found".into()))
+    async fn get_poll_id_for_slot(&self, slot_id: Uuid) -> crate::polls::AppErrorResult<Uuid> {
+        let row: Option<Uuid> = sqlx::query_scalar("SELECT poll_id FROM poll_slots WHERE id = $1")
+            .bind(slot_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| crate::error::AppError::InternalError(e.to_string()))?;
+        row.ok_or(crate::error::AppError::InternalError(
+            "slot not found".into(),
+        ))
     }
 }

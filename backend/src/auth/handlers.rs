@@ -11,6 +11,7 @@ use crate::auth::oauth::AuthState;
 use crate::auth::AuthenticatedUser;
 use crate::calendar::provider::CalendarProvider;
 use crate::error::AppError;
+use crate::polls::service::PollService;
 use crate::shares::models::{OwnerInfo, PublicShareResponse, ShareRange, Visibility};
 use crate::shares::service::{RealTokenService, ShareService};
 
@@ -191,12 +192,7 @@ pub async fn public_share(
     State(state): State<AuthState>,
     Path(token): Path<String>,
 ) -> Result<Json<PublicShareResponse>, AppError> {
-    let service = ShareService {
-        pool: state.pool.clone(),
-        token_service: RealTokenService,
-        public_base_url: state.config.public_base_url_or("http://localhost:3000"),
-        token_encryption_key: state.config.token_encryption_key_or().clone(),
-    };
+    let service = make_share_service(&state);
 
     let (share, events) = service
         .public_share_events(&token)
@@ -212,6 +208,20 @@ pub async fn public_share(
         .await?
         .ok_or(AppError::InternalError("owner not found".into()))?;
 
+    let contributors = crate::db::queries::list_share_contributors(&state.pool, share.id)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .into_iter()
+        .map(|c| crate::shares::models::ShareContributorInfo {
+            user_id: c.user_id,
+            display_name: None,
+            calendars: Vec::new(),
+        })
+        .collect();
+
+    let poll_service = PollService::new(state.pool.clone());
+    let polls = poll_service.list_polls_for_share(share.id).await?;
+
     let visibility = share.visibility_enum().as_str().to_string();
     Ok(Json(PublicShareResponse {
         owner: OwnerInfo {
@@ -224,6 +234,8 @@ pub async fn public_share(
         timezone: share.timezone,
         visibility,
         events,
+        contributors,
+        polls,
     }))
 }
 
@@ -277,6 +289,15 @@ async fn make_provider_with_connection(
         .with_connection(connection_id)
 }
 
+fn make_share_service(state: &AuthState) -> ShareService<crate::shares::service::RealTokenService> {
+    ShareService {
+        pool: state.pool.clone(),
+        token_service: RealTokenService,
+        public_base_url: state.config.public_base_url_or("http://localhost:3000"),
+        token_encryption_key: state.config.token_encryption_key_or().clone(),
+    }
+}
+
 async fn authenticate(
     state: &AuthState,
     headers: &HeaderMap,
@@ -309,6 +330,250 @@ async fn authenticate(
     })
 }
 
+pub async fn free_slots_handler(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(share_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = authenticate(&state, &headers).await?;
+    let service = make_share_service(&state);
+    let share = crate::db::queries::get_share_by_id(&state.pool, share_id)
+        .await?
+        .ok_or(AppError::ShareNotFound)?;
+    if share.user_id != user.user_id {
+        return Err(AppError::ShareAccessDenied);
+    }
+    let events = service
+        .public_share_events_for_id(&share)
+        .await
+        .map_err(|e| AppError::InternalError(e))?;
+    let slots = crate::shares::service::compute_free_slots(
+        share.start_time,
+        share.end_time,
+        &events,
+        &share.timezone,
+    );
+    Ok(Json(serde_json::json!({
+        "slots": slots.into_iter().map(|s| serde_json::json!({
+            "start": s.start,
+            "end": s.end,
+        })).collect::<Vec<_>>()
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddContributorRequest {
+    pub calendar_id: Uuid,
+}
+
+pub async fn add_contributor_handler(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(share_id): Path<Uuid>,
+    Json(req): Json<AddContributorRequest>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), AppError> {
+    let user = authenticate(&state, &headers).await?;
+    let service = make_share_service(&state);
+    let (share, events) = service
+        .add_contributor(share_id, req.calendar_id, user.user_id)
+        .await
+        .map_err(|e| AppError::InternalError(e))?;
+    let slots = crate::shares::service::compute_free_slots(
+        share.start_time,
+        share.end_time,
+        &events,
+        &share.timezone,
+    );
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "share_id": share.id,
+            "slots": slots.into_iter().map(|s| serde_json::json!({
+                "start": s.start,
+                "end": s.end,
+            })).collect::<Vec<_>>()
+        })),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreatePollRequest {
+    pub title: Option<String>,
+}
+
+pub async fn create_poll_handler(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(share_id): Path<Uuid>,
+    Json(req): Json<CreatePollRequest>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), AppError> {
+    let user = authenticate(&state, &headers).await?;
+    let share = crate::db::queries::get_share_by_id(&state.pool, share_id)
+        .await?
+        .ok_or(AppError::ShareNotFound)?;
+    if share.user_id != user.user_id {
+        return Err(AppError::ShareAccessDenied);
+    }
+    let service = make_share_service(&state);
+    let events = service
+        .public_share_events_for_id(&share)
+        .await
+        .map_err(|e| AppError::InternalError(e))?;
+    let slots = crate::shares::service::compute_free_slots(
+        share.start_time,
+        share.end_time,
+        &events,
+        &share.timezone,
+    );
+    let poll_service = PollService::new(state.pool.clone());
+    let poll = poll_service
+        .create_poll(share_id, req.title.as_deref(), &slots)
+        .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": poll.id,
+            "share_id": poll.share_id,
+            "title": poll.title,
+            "slots": poll.slots.into_iter().map(|s| serde_json::json!({
+                "id": s.id,
+                "start": s.start,
+                "end": s.end,
+            })).collect::<Vec<_>>()
+        })),
+    ))
+}
+
+pub async fn list_polls_handler(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+    Path(share_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user = authenticate(&state, &headers).await?;
+    let share = crate::db::queries::get_share_by_id(&state.pool, share_id)
+        .await?
+        .ok_or(AppError::ShareNotFound)?;
+    if share.user_id != user.user_id {
+        return Err(AppError::ShareAccessDenied);
+    }
+    let poll_service = PollService::new(state.pool.clone());
+    let polls = poll_service.list_polls_for_share(share_id).await?;
+    Ok(Json(serde_json::json!({
+        "polls": polls.into_iter().map(|p| serde_json::json!({
+            "id": p.id,
+            "share_id": p.share_id,
+            "title": p.title,
+            "slots": p.slots.into_iter().map(|s| serde_json::json!({
+                "id": s.id,
+                "start": s.start,
+                "end": s.end,
+                "votes": s.votes.into_iter().map(|v| serde_json::json!({
+                    "id": v.id,
+                    "user_id": v.user_id,
+                    "email": v.email,
+                    "display_name": v.display_name,
+                })).collect::<Vec<_>>()
+            })).collect::<Vec<_>>()
+        })).collect::<Vec<_>>()
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VoteRequest {
+    pub email: String,
+    pub display_name: Option<String>,
+}
+
+pub async fn vote_slot_handler(
+    State(state): State<AuthState>,
+    Path(slot_id): Path<Uuid>,
+    Json(req): Json<VoteRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id = crate::polls::store::user_id_for_email(&state.pool, &req.email).await?;
+    let poll_service = PollService::new(state.pool.clone());
+    let slot = poll_service
+        .vote(slot_id, user_id, &req.email, req.display_name.as_deref())
+        .await?;
+    Ok(Json(serde_json::json!({
+        "id": slot.id,
+        "poll_id": slot.poll_id,
+        "start": slot.start,
+        "end": slot.end,
+        "votes": slot.votes.into_iter().map(|v| serde_json::json!({
+            "id": v.id,
+            "user_id": v.user_id,
+            "email": v.email,
+            "display_name": v.display_name,
+        })).collect::<Vec<_>>()
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UnvoteRequest {
+    pub email: String,
+}
+
+pub async fn unvote_slot_handler(
+    State(state): State<AuthState>,
+    Path(slot_id): Path<Uuid>,
+    Json(req): Json<UnvoteRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let user_id = crate::polls::store::user_id_for_email(&state.pool, &req.email).await?;
+    let poll_service = PollService::new(state.pool.clone());
+    let ok = poll_service.unvote(slot_id, user_id).await?;
+    Ok(Json(serde_json::json!({ "unvoted": ok })))
+}
+
+pub async fn public_free_slots_handler(
+    State(state): State<AuthState>,
+    Path(token): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let service = make_share_service(&state);
+    let Some(slots) = service
+        .free_slots(&token)
+        .await
+        .map_err(|e| AppError::InternalError(e))?
+    else {
+        return Err(AppError::ShareNotFound);
+    };
+    Ok(Json(serde_json::json!({
+        "slots": slots.into_iter().map(|s| serde_json::json!({
+            "start": s.start,
+            "end": s.end,
+        })).collect::<Vec<_>>()
+    })))
+}
+
+pub async fn public_add_contributor_handler(
+    State(state): State<AuthState>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<AddContributorRequest>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), AppError> {
+    let user = authenticate(&state, &headers).await?;
+    let service = make_share_service(&state);
+    let (share, events) = service
+        .add_contributor_by_token(&token, req.calendar_id, user.user_id)
+        .await
+        .map_err(|e| AppError::InternalError(e))?;
+    let slots = crate::shares::service::compute_free_slots(
+        share.start_time,
+        share.end_time,
+        &events,
+        &share.timezone,
+    );
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "share_id": share.id,
+            "slots": slots.into_iter().map(|s| serde_json::json!({
+                "start": s.start,
+                "end": s.end,
+            })).collect::<Vec<_>>()
+        })),
+    ))
+}
+
 pub fn router() -> Router<AuthState> {
     Router::new()
         .route("/health", get(health))
@@ -320,5 +585,26 @@ pub fn router() -> Router<AuthState> {
             post(create_share_handler).get(list_shares_handler),
         )
         .route("/api/shares/:id", delete(revoke_share_handler))
+        .route("/api/shares/:id/free-slots", get(free_slots_handler))
+        .route(
+            "/api/shares/:id/contributors",
+            post(add_contributor_handler),
+        )
+        .route(
+            "/api/shares/:id/polls",
+            post(create_poll_handler).get(list_polls_handler),
+        )
         .route("/api/public/shares/:token", get(public_share))
+        .route(
+            "/api/public/shares/:token/free-slots",
+            get(public_free_slots_handler),
+        )
+        .route(
+            "/api/public/shares/:token/contributors",
+            post(public_add_contributor_handler),
+        )
+        .route(
+            "/api/polls/slots/:slot_id/vote",
+            post(vote_slot_handler).delete(unvote_slot_handler),
+        )
 }

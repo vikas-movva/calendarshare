@@ -153,11 +153,45 @@ pub struct PublicShareResponse {
     pub timezone: String,
     pub visibility: String,
     pub events: Vec<PublicEvent>,
+    pub contributors: Vec<ShareContributorInfo>,
+    pub polls: Vec<crate::polls::models::Poll>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OwnerInfo {
     pub display_name: Option<String>,
+}
+
+/// A free time window derived from a share's busy events. Free slots are
+/// computed from the share's events at poll-creation time and are immutable.
+#[derive(Debug, Clone, Serialize)]
+pub struct FreeSlot {
+    pub start: DateTime<chrono::Utc>,
+    pub end: DateTime<chrono::Utc>,
+}
+
+/// A contributor to a share: a user whose calendars were merged into the
+/// share's busy-time snapshot.
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct ShareContributor {
+    pub id: Uuid,
+    pub share_id: Uuid,
+    pub user_id: Uuid,
+    pub calendar_id: Uuid,
+    pub created_at: DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ShareContributorInfo {
+    pub user_id: Uuid,
+    pub display_name: Option<String>,
+    pub calendars: Vec<ContributorCalendar>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContributorCalendar {
+    pub calendar_id: Uuid,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
