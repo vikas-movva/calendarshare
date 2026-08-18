@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { activeTheme, themeOrder, type ThemeMode, type ThemeName } from './theme'
 
 export interface ThemeContextValue {

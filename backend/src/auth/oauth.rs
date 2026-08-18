@@ -23,7 +23,11 @@ pub struct OAuthCallbackQuery {
 
 pub trait OauthClient: Send + Sync {
     fn auth_url(&self, redirect_uri: &str) -> String;
-    async fn handle_callback(&self, code: &str, redirect_uri: &str) -> Result<CallbackResult, AppError>;
+    async fn handle_callback(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<CallbackResult, AppError>;
 }
 
 pub struct CallbackResult {
@@ -96,7 +100,11 @@ impl OauthClient for GoogleOauthClient {
         self.auth_url(redirect_uri)
     }
 
-    async fn handle_callback(&self, code: &str, redirect_uri: &str) -> Result<CallbackResult, AppError> {
+    async fn handle_callback(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<CallbackResult, AppError> {
         let token = self
             .exchange_code(code, redirect_uri)
             .await
@@ -165,10 +173,7 @@ fn set_cookie_header(value: &str, max_age: i64) -> HeaderValue {
     cookie.parse().expect("invalid cookie header")
 }
 
-pub async fn login(
-    State(state): State<AuthState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn login(State(state): State<AuthState>, headers: HeaderMap) -> impl IntoResponse {
     let redirect_uri = redirect_uri_from_request(&headers, &state.config);
     let client = GoogleOauthClient::new(state.config.clone(), state.pool.clone());
     Redirect::temporary(&client.auth_url(&redirect_uri))

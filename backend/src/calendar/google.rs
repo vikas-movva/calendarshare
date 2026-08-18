@@ -81,11 +81,7 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
                     return Err(CalendarProviderError::Config(e));
                 }
             };
-            let token = match self
-                .oauth
-                .refresh_token(&decrypted)
-                .await
-            {
+            let token = match self.oauth.refresh_token(&decrypted).await {
                 Ok(t) => t,
                 Err(e) => {
                     tracing::error!(error = %e, status = ?e.status(), "google refresh_token failed");

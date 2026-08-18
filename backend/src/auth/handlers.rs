@@ -58,7 +58,8 @@ pub async fn list_events(
         .await?
         .ok_or(AppError::CalendarNotFound)?;
 
-    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
+    let provider =
+        make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
     let events = provider
         .list_events(&calendar.provider_calendar_id, params.start, params.end)
         .await?;
@@ -103,7 +104,8 @@ pub async fn create_share_handler(
         .timezone
         .unwrap_or_else(|| calendar.timezone.clone().unwrap_or_else(|| "UTC".into()));
 
-    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
+    let provider =
+        make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
     let events = provider
         .list_events(&calendar.provider_calendar_id, req.start_time, req.end_time)
         .await?;
@@ -222,12 +224,16 @@ async fn make_provider(
         state.config.google_client_secret_or(""),
         state.config.google_redirect_uri_or(""),
     );
-    let provider = crate::calendar::google::GoogleCalendarProvider::new(oauth, state.pool.clone(), user_id);
+    let provider =
+        crate::calendar::google::GoogleCalendarProvider::new(oauth, state.pool.clone(), user_id);
 
     // Resolve the user's Google connection so saved calendars are linked to a
     // real connection_id (not Uuid::nil()). Otherwise the calendars row is
     // orphaned and the JOIN in list_calendars_for_user never returns them.
-    let connection_id = get_google_connection_id(state.pool.clone(), user_id).await.ok().flatten();
+    let connection_id = get_google_connection_id(state.pool.clone(), user_id)
+        .await
+        .ok()
+        .flatten();
     match connection_id {
         Some(id) => provider.with_connection(id),
         None => provider,
@@ -253,7 +259,9 @@ async fn make_provider_with_connection(
     connection_id: Uuid,
 ) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient>
 {
-    make_provider(state, user_id).await.with_connection(connection_id)
+    make_provider(state, user_id)
+        .await
+        .with_connection(connection_id)
 }
 
 async fn authenticate(
