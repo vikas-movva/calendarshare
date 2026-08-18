@@ -114,6 +114,7 @@ pub async fn create_share_handler(
         pool: state.pool.clone(),
         token_service: RealTokenService,
         public_base_url: state.config.public_base_url_or("http://localhost:3000"),
+        token_encryption_key: state.config.token_encryption_key_or().clone(),
     };
 
     let result = service
@@ -148,18 +149,29 @@ pub async fn list_shares_handler(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = authenticate(&state, &headers).await?;
+    let service = ShareService {
+        pool: state.pool.clone(),
+        token_service: RealTokenService,
+        public_base_url: state.config.public_base_url_or("http://localhost:3000"),
+        token_encryption_key: state.config.token_encryption_key_or().clone(),
+    };
+
     let shares = crate::db::queries::list_shares_for_user(&state.pool, user.user_id).await?;
     Ok(Json(serde_json::json!({
-        "shares": shares.into_iter().map(|s| serde_json::json!({
-            "id": s.id,
-            "start_time": s.start_time,
-            "end_time": s.end_time,
-            "timezone": s.timezone,
-            "visibility": s.visibility_enum().as_str(),
-            "expires_at": s.expires_at,
-            "revoked_at": s.revoked_at,
-            "created_at": s.created_at,
-        })).collect::<Vec<_>>()
+        "shares": shares.into_iter().map(|s| {
+            let token = service.decrypt_token(&s);
+            serde_json::json!({
+                "id": s.id,
+                "token": token,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "timezone": s.timezone,
+                "visibility": s.visibility_enum().as_str(),
+                "expires_at": s.expires_at,
+                "revoked_at": s.revoked_at,
+                "created_at": s.created_at,
+            })
+        }).collect::<Vec<_>>()
     })))
 }
 
@@ -183,6 +195,7 @@ pub async fn public_share(
         pool: state.pool.clone(),
         token_service: RealTokenService,
         public_base_url: state.config.public_base_url_or("http://localhost:3000"),
+        token_encryption_key: state.config.token_encryption_key_or().clone(),
     };
 
     let (share, events) = service

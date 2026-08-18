@@ -38,6 +38,7 @@ export interface CreateShareResponse {
 
 export interface ShareSummary {
   id: string;
+  token: string;
   start_time: string;
   end_time: string;
   timezone: string;

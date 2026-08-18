@@ -155,8 +155,8 @@ pub async fn create_share(
     let row = sqlx::query_as::<_, crate::shares::models::Share>(
         r#"
         INSERT INTO shares
-            (id, user_id, calendar_id, token_hash, start_time, end_time, timezone, visibility, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (id, user_id, calendar_id, token_hash, token_encrypted, start_time, end_time, timezone, visibility, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
         "#,
     )
@@ -164,6 +164,7 @@ pub async fn create_share(
     .bind(share.user_id)
     .bind(share.calendar_id)
     .bind(&share.token_hash)
+    .bind(&share.token_encrypted)
     .bind(share.start_time)
     .bind(share.end_time)
     .bind(&share.timezone)

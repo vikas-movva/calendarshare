@@ -22,6 +22,7 @@ pub struct ShareService<S> {
     pub pool: crate::db::PgPool,
     pub token_service: S,
     pub public_base_url: String,
+    pub token_encryption_key: [u8; 32],
 }
 
 impl<S: TokenService> ShareService<S> {
@@ -45,12 +46,15 @@ impl<S: TokenService> ShareService<S> {
         let token = self.token_service.generate()?;
         let token_hash = self.token_service.hash(&token)?;
 
+        let token_encrypted = crate::encryption::encrypt(&token, &self.token_encryption_key).ok();
+
         let share_id = Uuid::new_v4();
         let new_share = NewShare {
             id: share_id,
             user_id,
             calendar_id,
             token_hash: token_hash.clone(),
+            token_encrypted,
             start_time: req.start_time,
             end_time: req.end_time,
             timezone: timezone.clone(),
@@ -134,6 +138,11 @@ impl<S: TokenService> ShareService<S> {
             .collect();
 
         Ok(Some((share, projected)))
+    }
+
+    pub fn decrypt_token(&self, share: &crate::shares::models::Share) -> Option<String> {
+        let encrypted = share.token_encrypted.as_ref()?;
+        crate::encryption::decrypt(encrypted, &self.token_encryption_key).ok()
     }
 }
 

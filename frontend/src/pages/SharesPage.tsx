@@ -1,25 +1,124 @@
 import { useMe, useShares, useRevokeShare } from '../hooks/queries'
-import { CopySmall, TrashSmall, EyeSmall } from '../components/Icons'
-import { motion } from 'framer-motion'
+import { CopySmall, TrashSmall, EyeSmall, CheckSmall } from '../components/Icons'
+import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp, stagger, slideRight } from '../theme/anim'
+import { useState, useEffect, useCallback } from 'react'
+
+const ONE_HOUR = 60 * 60 * 1000
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'Expired'
+  const total = Math.floor(ms / 1000)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function lifespanMs(s: { created_at: string; expires_at: string | null }): number | null {
+  if (!s.expires_at) return null
+  return new Date(s.expires_at).getTime() - new Date(s.created_at).getTime()
+}
+
+function CopyButton({ s, onCopied }: { s: { token?: string }; onCopied: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  async function handleCopy() {
+    if (!s.token) return
+    try {
+      await navigator.clipboard.writeText(window.location.origin + '/s/' + s.token)
+      setCopied(true)
+      onCopied()
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={handleCopy}
+        title="Copy link"
+        className="relative grid h-8 w-8 place-items-center rounded-lg border border-border text-content-muted hover:bg-card"
+      >
+        <AnimatePresence initial={false}>
+          {copied ? (
+            <motion.span
+              key="check"
+              className="grid h-8 w-8 place-items-center rounded-lg bg-green-500/15 text-green-400"
+              initial={{ scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.4, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <CheckSmall />
+            </motion.span>
+          ) : (
+            <motion.span
+              key="copy"
+              className="grid h-8 w-8 place-items-center"
+              initial={{ scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.4, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <CopySmall />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </button>
+      <AnimatePresence>
+        {copied && (
+          <motion.span
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6 }}
+            transition={{ duration: 0.2 }}
+            className="text-xs font-medium text-green-400"
+          >
+            Copied!
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function Countdown({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setRemaining(new Date(expiresAt).getTime() - Date.now())
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [expiresAt])
+
+  return (
+    <span className={`text-xs font-medium ${remaining <= 5000 ? 'text-red-400' : 'text-amber-400'}`}>
+      {formatCountdown(remaining)} left
+    </span>
+  )
+}
 
 export default function SharesPage() {
   const { data: user, isLoading: meLoading } = useMe()
   const { data, isLoading } = useShares()
   const revoke = useRevokeShare()
+  const [toast, setToast] = useState<string | null>(null)
   const shares = data?.shares || []
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 1800)
+  }, [])
 
   if (!meLoading && !user) {
     window.location.href = '/auth/login'
     return null
-  }
-
-  async function handleCopy(s: { id: string }) {
-    try {
-      await navigator.clipboard.writeText(window.location.origin + '/s/' + s.id)
-    } catch {
-      // ignore
-    }
   }
 
   async function handleRevoke(s: { id: string }) {
@@ -41,6 +140,21 @@ export default function SharesPage() {
         <a href="/shares/new" className="btn-primary">New share</a>
       </motion.div>
 
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+            className="mb-4 flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2.5 text-sm text-green-400"
+          >
+            <CheckSmall />
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {isLoading ? (
         <div className="card p-8 text-center text-content-muted">Loading…</div>
       ) : shares.length === 0 ? (
@@ -58,6 +172,8 @@ export default function SharesPage() {
         <motion.ul variants={stagger} initial="hidden" animate="visible" className="space-y-3">
           {shares.map((s) => {
             const status = s.revoked_at ? 'revoked' : isExpired(s) ? 'expired' : 'active'
+            const lifespan = lifespanMs(s)
+            const shortLived = status === 'active' && lifespan !== null && lifespan < ONE_HOUR
             return (
               <motion.li key={s.id} variants={slideRight} className="card overflow-hidden">
                 <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
@@ -78,17 +194,15 @@ export default function SharesPage() {
                       {status}
                     </span>
                     {s.expires_at && status === 'active' && (
-                      <span className="hidden text-xs text-content-faint sm:inline">
-                        expires {new Date(s.expires_at).toLocaleDateString()}
-                      </span>
+                      shortLived ? (
+                        <Countdown expiresAt={s.expires_at} />
+                      ) : (
+                        <span className="hidden text-xs text-content-faint sm:inline">
+                          expires {new Date(s.expires_at).toLocaleDateString()}
+                        </span>
+                      )
                     )}
-                    <button
-                      onClick={() => handleCopy(s)}
-                      title="Copy link"
-                      className="grid h-8 w-8 place-items-center rounded-lg border border-border text-content-muted hover:bg-card"
-                    >
-                      <CopySmall />
-                    </button>
+                    <CopyButton s={s} onCopied={() => showToast('Link copied!')} />
                     <button
                       onClick={() => handleRevoke(s)}
                       disabled={revoke.isPending}

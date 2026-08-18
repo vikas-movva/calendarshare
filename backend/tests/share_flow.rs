@@ -81,6 +81,7 @@ async fn public_share_flow_roundtrip() {
         pool: pool.clone(),
         token_service: RealTokenService,
         public_base_url: "https://example.com".into(),
+        token_encryption_key: [0u8; 32],
     };
 
     let result = service.public_share_events(&token).await.unwrap();
