@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMe, useCalendars, useCreateShare } from '../hooks/queries'
 import { CalendarSmall, CopySmall, ArrowLeftSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
@@ -28,6 +28,7 @@ function endOfDayUTC(d: Date) {
 
 export default function NewSharePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { data: user, isLoading: meLoading } = useMe()
   const { data: calendars } = useCalendars()
   const createShare = useCreateShare()
@@ -37,7 +38,17 @@ export default function NewSharePage() {
     return null
   }
 
+  const calendarsList = calendars?.calendars || []
   const [calendarId, setCalendarId] = useState<string>('')
+
+  // Pre-select the calendar passed from the dashboard (?calendar=<id>).
+  useEffect(() => {
+    const fromQuery = searchParams.get('calendar')
+    if (fromQuery && calendarsList.some((c) => c.id === fromQuery)) {
+      setCalendarId(fromQuery)
+    }
+  }, [searchParams, calendarsList])
+
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [visibility, setVisibility] = useState<'busy' | 'title_time' | 'details'>('title_time')
@@ -45,7 +56,6 @@ export default function NewSharePage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ url: string } | null>(null)
 
-  const calendarsList = calendars?.calendars || []
   const selectedCalendar = calendarsList.find((c) => c.id === calendarId)
 
   const handleSubmit = async (e: React.FormEvent) => {
