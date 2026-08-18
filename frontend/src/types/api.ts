@@ -28,6 +28,7 @@ export interface CreateShareRequest {
   visibility: "busy" | "title_time" | "details";
   expires_at: string | null;
   timezone?: string;
+  mark_working_hours_busy?: boolean;
 }
 
 export interface CreateShareResponse {
@@ -55,6 +56,8 @@ export interface PublicEvent {
   location: string | null;
   description: string | null;
   is_all_day: boolean;
+  owner_user_id: string | null;
+  owner_display_name: string | null;
 }
 
 export interface FreeSlot {

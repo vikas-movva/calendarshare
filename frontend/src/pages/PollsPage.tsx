@@ -223,7 +223,7 @@ export default function PollsPage() {
                     </div>
                   </div>
 
-                  <div className="divide-y divide-border">
+                  <div className="divide-y divide-border overflow-y-auto max-h-[50vh]">
                     {sortedSlots.map((slot) => {
                       const voted = voter ? slot.votes.some((v) => v.email === voter.email) : false
                       const isWinner = slot.votes.length === maxVotes && maxVotes > 0

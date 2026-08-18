@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useMe, useCalendars, useShares } from '../hooks/queries'
-import { CalendarSmall, UsersSmall, ClockSmall, PlusSmall } from '../components/Icons'
+import { CalendarSmall, UsersSmall, ClockSmall, PlusSmall, ShareSmall } from '../components/Icons'
 import { fadeUp, stagger } from '../theme/anim'
 
 export default function DashboardPage() {
@@ -62,7 +62,10 @@ export default function DashboardPage() {
           <PlusSmall />
           Create share
         </a>
-        <a href="/shares" className="btn-ghost">View all shares</a>
+        <a href="/shares" className="btn-ghost md:w-auto w-full">
+          <ShareSmall />
+          View all shares
+        </a>
       </motion.div>
     </div>
   )

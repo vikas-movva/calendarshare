@@ -18,25 +18,42 @@ const EXPIRATION_OPTIONS = [
   { value: 'never', label: 'Never', ms: null },
 ] as const
 
-// Build the start/end of a chosen "YYYY-MM-DD" as local midnight in the
-// calendar's timezone, then convert to UTC. Storing the instant as local
-// midnight (rather than UTC midnight) keeps the chosen calendar day aligned
-// with the owner's calendar: in a tz behind UTC, UTC midnight of Aug 16 is
-// still Aug 15 locally, which shifted every share a day early.
+// Build the start of a chosen "YYYY-MM-DD" as local midnight (00:00:00) in
+// the calendar's timezone, expressed as a UTC instant. Storing local midnight
+// (rather than UTC midnight) keeps the chosen calendar day aligned with the
+// owner's calendar: in a tz behind UTC, UTC midnight of Aug 16 is still Aug
+// 15 locally, which shifted every share a day early.
 function startOfDayUTC(dateStr: string, tz: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz || 'UTC',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date(Date.UTC(y, m - 1, d, 12)))
-  const g = (t: string) => Number(parts.find((p) => p.type === t)!.value)
-  return new Date(Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')))
+  const [y, m0, d] = dateStr.split('-').map(Number) // m0 is 1-indexed
+  const probe = (dt: Date) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz || 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(dt)
+    const g = (t: string) => Number(parts.find((p) => p.type === t)!.value)
+    return { y: g('year'), mo: g('month') - 1, da: g('day'), h: g('hour'), mi: g('minute'), s: g('second') }
+  }
+  // Initial guess: UTC midnight of the chosen date. Iterate toward local
+  // 00:00:00 of that date, correcting for the timezone offset (which wraps
+  // around midnight for timezones behind/ahead of UTC).
+  let cur = new Date(Date.UTC(y, m0 - 1, d, 0, 0, 0))
+  for (let i = 0; i < 3; i++) {
+    const p = probe(cur)
+    if (p.y === y && p.mo === m0 - 1 && p.da === d && p.h === 0 && p.mi === 0 && p.s === 0) return cur
+    let offsetMin = p.h * 60 + p.mi + p.s / 60
+    const probeDate = p.y * 10000 + (p.mo + 1) * 100 + p.da
+    const wantDate = y * 10000 + m0 * 100 + d
+    if (probeDate < wantDate) offsetMin -= 1440
+    else if (probeDate > wantDate) offsetMin += 1440
+    cur = new Date(cur.getTime() - offsetMin * 60 * 1000)
+  }
+  return cur
 }
 
 function endOfDayUTC(dateStr: string, tz: string): Date {
@@ -67,6 +84,7 @@ export default function NewSharePage() {
   const [endDate, setEndDate] = useState('')
   const [visibility, setVisibility] = useState<'busy' | 'title_time' | 'details'>('title_time')
   const [expiration, setExpiration] = useState('7d')
+  const [markWorkingHours, setMarkWorkingHours] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ url: string; id: string } | null>(null)
   const [pollTitle, setPollTitle] = useState('')
@@ -103,6 +121,7 @@ export default function NewSharePage() {
         visibility,
         expires_at,
         timezone: selectedCalendar?.timezone || undefined,
+        mark_working_hours_busy: markWorkingHours,
       })
       setResult({ url: res.url, id: res.id })
     } catch (err) {
@@ -289,7 +308,25 @@ export default function NewSharePage() {
           </motion.div>
 
           <motion.div variants={fadeUp}>
-            <label className="section-title">Step 4 · Link expires</label>
+            <label className="section-title">Step 4 · Working hours</label>
+            <label className="mt-2 flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 hover:bg-card">
+              <input
+                type="checkbox"
+                checked={markWorkingHours}
+                onChange={(e) => setMarkWorkingHours(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-accent"
+              />
+              <span>
+                <span className="block text-sm font-medium text-content">Mark 9am–5pm as busy</span>
+                <span className="block text-xs text-content-muted">
+                  Every day in the range is treated as busy from 09:00 to 17:00 in your calendar's timezone. Recipients only see free time outside business hours.
+                </span>
+              </span>
+            </label>
+          </motion.div>
+
+          <motion.div variants={fadeUp}>
+            <label className="section-title">Step 5 · Link expires</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {EXPIRATION_OPTIONS.map((opt) => (
                 <button

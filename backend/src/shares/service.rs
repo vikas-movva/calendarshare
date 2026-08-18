@@ -1,4 +1,5 @@
 use chrono::{DateTime, Timelike};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::calendar::models::CalendarEvent;
@@ -129,6 +130,10 @@ pub struct CreateShareRequest {
     pub visibility: crate::shares::models::Visibility,
     pub expires_at: Option<DateTime<chrono::Utc>>,
     pub timezone: String,
+    /// When true, every calendar day in the range is marked busy from
+    /// 09:00 to 17:00 (share-local time) in addition to the owner's real
+    /// events. Recipients then only see free time outside business hours.
+    pub mark_working_hours_busy: bool,
 }
 
 pub struct CreateShareResult {
@@ -184,7 +189,11 @@ impl<S: TokenService> ShareService<S> {
             .await
             .map_err(|e| e.to_string())?;
 
-        let new_events: Vec<NewShareEvent> = filtered
+        // Optionally mark 09:00–17:00 (share-local time) as busy on every
+        // calendar day in the range. These are synthetic "busy" blocks with no
+        // real event backing them; they shrink the computed free times to
+        // outside business hours.
+        let mut new_events: Vec<NewShareEvent> = filtered
             .iter()
             .map(|e| NewShareEvent {
                 id: Uuid::new_v4(),
@@ -196,8 +205,25 @@ impl<S: TokenService> ShareService<S> {
                 location: e.location.clone(),
                 description: e.description.clone(),
                 is_all_day: e.is_all_day,
+                owner_user_id: Some(user_id),
             })
             .collect();
+        if req.mark_working_hours_busy {
+                for block in Self::working_hours_blocks(req.start_time, req.end_time, &timezone) {
+                    new_events.push(NewShareEvent {
+                        id: Uuid::new_v4(),
+                        share_id,
+                        provider_event_id: Some(format!("working-hours-{}", block.start.to_rfc3339())),
+                        title: Some("Working hours".to_string()),
+                        start_time: block.start,
+                        end_time: block.end,
+                        location: None,
+                        description: None,
+                        is_all_day: false,
+                        owner_user_id: Some(user_id),
+                    });
+                }
+            }
 
         crate::db::queries::create_share_events(&self.pool, &new_events)
             .await
@@ -206,6 +232,45 @@ impl<S: TokenService> ShareService<S> {
         let url = format!("{}/s/{}", self.public_base_url, token);
 
         Ok(CreateShareResult { share, url })
+    }
+
+    /// Build one 09:00–17:00 busy block per calendar day in [start, end), in the
+    /// share's timezone, as UTC instants. Days are enumerated in the local
+    /// timezone so the blocks always land on the owner's calendar days.
+    fn working_hours_blocks(
+        start: DateTime<chrono::Utc>,
+        end: DateTime<chrono::Utc>,
+        tz: &str,
+    ) -> Vec<CalendarEvent> {
+        let tz: chrono_tz::Tz = tz.parse().unwrap_or(chrono_tz::UTC);
+        let start_local = start.with_timezone(&tz);
+        let end_local = end.with_timezone(&tz);
+
+        let mut cursor = start_local.date_naive();
+        let last = end_local.date_naive();
+        let mut blocks = Vec::new();
+        while cursor <= last {
+            let day_start = cursor.and_hms_opt(9, 0, 0).unwrap();
+            let day_end = cursor.and_hms_opt(17, 0, 0).unwrap();
+            // Skip the block if the working window falls entirely outside the
+            // share range (only relevant on boundary days).
+            if day_end.and_utc().with_timezone(&chrono::Utc) > start
+                && day_start.and_utc().with_timezone(&chrono::Utc) < end
+            {
+                blocks.push(CalendarEvent {
+                    provider_event_id: None,
+                    title: Some("Working hours".to_string()),
+                    start: day_start.and_utc().with_timezone(&chrono::Utc),
+                    end: day_end.and_utc().with_timezone(&chrono::Utc),
+                    timezone: Some(tz.to_string()),
+                    location: None,
+                    description: None,
+                    is_all_day: false,
+                });
+            }
+            cursor += chrono::Duration::days(1);
+        }
+        blocks
     }
 
     pub async fn public_share_events(
@@ -235,25 +300,7 @@ impl<S: TokenService> ShareService<S> {
             .await
             .map_err(|e| e.to_string())?;
 
-        let projected: Vec<PublicEvent> = events
-            .iter()
-            .map(|e| {
-                let source = CalendarEvent {
-                    provider_event_id: e.provider_event_id.clone(),
-                    title: e.title.clone(),
-                    start: e.start_time,
-                    end: e.end_time,
-                    timezone: None,
-                    location: e.location.clone(),
-                    description: e.description.clone(),
-                    is_all_day: e.is_all_day,
-                };
-                crate::shares::models::project_event_for_visibility(
-                    &source,
-                    share.visibility_enum(),
-                )
-            })
-            .collect();
+        let projected = self.project_events(&share, &events).await?;
 
         Ok(Some((share, projected)))
     }
@@ -263,8 +310,9 @@ impl<S: TokenService> ShareService<S> {
         crate::encryption::decrypt(encrypted, &self.token_encryption_key).ok()
     }
 
-    /// Project a share's stored events for public viewing (used by handlers
-    /// that need the events without resolving a token).
+    /// Project a share's stored events for public viewing, resolving each
+    /// event's owner_user_id to a display name. Used by handlers that need the
+    /// events without resolving a token.
     pub async fn public_share_events_for_id(
         &self,
         share: &crate::shares::models::Share,
@@ -272,7 +320,24 @@ impl<S: TokenService> ShareService<S> {
         let events = crate::db::queries::list_share_events(&self.pool, share.id)
             .await
             .map_err(|e| e.to_string())?;
-        let projected: Vec<PublicEvent> = events
+        self.project_events(share, &events).await
+    }
+
+    async fn project_events(
+        &self,
+        share: &crate::shares::models::Share,
+        events: &[crate::shares::models::ShareEvent],
+    ) -> Result<Vec<PublicEvent>, String> {
+        let owner_ids: Vec<Uuid> = events
+            .iter()
+            .filter_map(|e| e.owner_user_id)
+            .collect();
+        let names: HashMap<Uuid, Option<String>> =
+            crate::db::queries::get_display_names_by_ids(&self.pool, &owner_ids)
+                .await
+                .map_err(|e| e.to_string())?;
+
+        Ok(events
             .iter()
             .map(|e| {
                 let source = CalendarEvent {
@@ -285,13 +350,19 @@ impl<S: TokenService> ShareService<S> {
                     description: e.description.clone(),
                     is_all_day: e.is_all_day,
                 };
+                let owner_name = e
+                    .owner_user_id
+                    .and_then(|uid| names.get(&uid))
+                    .cloned()
+                    .flatten();
                 crate::shares::models::project_event_for_visibility(
                     &source,
                     share.visibility_enum(),
+                    e.owner_user_id,
+                    owner_name,
                 )
             })
-            .collect();
-        Ok(projected)
+            .collect())
     }
 
     /// Compute the free time slots for a share, given its current events.
@@ -361,15 +432,21 @@ impl<S: TokenService> ShareService<S> {
             .map_err(|e| e.to_string())?;
 
         // Merge the new events into the share's existing events (dedupe by
-        // provider_event_id), then recompute the projected public events.
+        // provider_event_id), preserving each event's owner_user_id, then
+        // recompute the projected public events. Only the genuinely new events
+        // are inserted — existing rows are left untouched, so re-adding a
+        // contributor never violates the share_events primary key.
         let mut existing = crate::db::queries::list_share_events(&self.pool, share_id)
             .await
             .map_err(|e| e.to_string())?;
-        let mut seen: std::collections::HashSet<Option<String>> = std::collections::HashSet::new();
-        existing.retain(|e| seen.insert(e.provider_event_id.clone()));
+        let mut seen: std::collections::HashSet<Option<String>> = existing
+            .iter()
+            .map(|e| e.provider_event_id.clone())
+            .collect();
+        let mut new_rows: Vec<crate::shares::models::NewShareEvent> = Vec::new();
         for e in &new_events {
             if seen.insert(e.provider_event_id.clone()) {
-                existing.push(crate::shares::models::ShareEvent {
+                new_rows.push(crate::shares::models::NewShareEvent {
                     id: Uuid::new_v4(),
                     share_id,
                     provider_event_id: e.provider_event_id.clone(),
@@ -379,49 +456,30 @@ impl<S: TokenService> ShareService<S> {
                     location: e.location.clone(),
                     description: e.description.clone(),
                     is_all_day: e.is_all_day,
+                    owner_user_id: Some(user_id),
+                });
+                existing.push(crate::shares::models::ShareEvent {
+                    id: new_rows.last().unwrap().id,
+                    share_id,
+                    provider_event_id: e.provider_event_id.clone(),
+                    title: e.title.clone(),
+                    start_time: e.start,
+                    end_time: e.end,
+                    location: e.location.clone(),
+                    description: e.description.clone(),
+                    is_all_day: e.is_all_day,
                     created_at: chrono::Utc::now(),
+                    owner_user_id: Some(user_id),
                 });
             }
         }
-        crate::db::queries::create_share_events(
-            &self.pool,
-            &existing
-                .iter()
-                .map(|e| crate::shares::models::NewShareEvent {
-                    id: e.id,
-                    share_id: e.share_id,
-                    provider_event_id: e.provider_event_id.clone(),
-                    title: e.title.clone(),
-                    start_time: e.start_time,
-                    end_time: e.end_time,
-                    location: e.location.clone(),
-                    description: e.description.clone(),
-                    is_all_day: e.is_all_day,
-                })
-                .collect::<Vec<_>>(),
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        if !new_rows.is_empty() {
+            crate::db::queries::create_share_events(&self.pool, &new_rows)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
 
-        let projected: Vec<PublicEvent> = existing
-            .iter()
-            .map(|e| {
-                let source = CalendarEvent {
-                    provider_event_id: e.provider_event_id.clone(),
-                    title: e.title.clone(),
-                    start: e.start_time,
-                    end: e.end_time,
-                    timezone: None,
-                    location: e.location.clone(),
-                    description: e.description.clone(),
-                    is_all_day: e.is_all_day,
-                };
-                crate::shares::models::project_event_for_visibility(
-                    &source,
-                    share.visibility_enum(),
-                )
-            })
-            .collect();
+        let projected = self.project_events(&share, &existing).await?;
 
         Ok((share, projected))
     }

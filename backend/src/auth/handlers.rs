@@ -86,6 +86,11 @@ pub struct CreateShareRequest {
     pub visibility: String,
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
     pub timezone: Option<String>,
+    /// When true, every calendar day in the range is marked busy from
+    /// 09:00 to 17:00 (share-local time), so free times only show outside
+    /// business hours.
+    #[serde(default)]
+    pub mark_working_hours_busy: bool,
 }
 
 pub async fn create_share_handler(
@@ -130,6 +135,7 @@ pub async fn create_share_handler(
                 visibility,
                 expires_at: req.expires_at,
                 timezone,
+                mark_working_hours_busy: req.mark_working_hours_busy,
             },
         )
         .await
@@ -210,14 +216,39 @@ pub async fn public_share(
 
     let contributors = crate::db::queries::list_share_contributors(&state.pool, share.id)
         .await
-        .map_err(|e| AppError::InternalError(e.to_string()))?
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let owner_ids: Vec<Uuid> = contributors.iter().map(|c| c.user_id).collect();
+    let names = crate::db::queries::get_display_names_by_ids(&state.pool, &owner_ids)
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+
+    let mut contributors: Vec<crate::shares::models::ShareContributorInfo> = contributors
         .into_iter()
         .map(|c| crate::shares::models::ShareContributorInfo {
             user_id: c.user_id,
-            display_name: None,
+            display_name: names.get(&c.user_id).cloned().flatten(),
             calendars: Vec::new(),
         })
         .collect();
+    // Group contributor rows by user and attach the calendar name each row
+    // points to.
+    for info in &mut contributors {
+        let rows = crate::db::queries::list_contributor_calendars_for_share(
+            &state.pool,
+            share.id,
+            info.user_id,
+        )
+        .await
+        .map_err(|e| AppError::InternalError(e.to_string()))?;
+        info.calendars = rows
+            .into_iter()
+            .map(|c| crate::shares::models::ContributorCalendar {
+                calendar_id: c.id,
+                name: c.name,
+            })
+            .collect();
+    }
 
     let poll_service = PollService::new(state.pool.clone());
     let polls = poll_service.list_polls_for_share(share.id).await?;

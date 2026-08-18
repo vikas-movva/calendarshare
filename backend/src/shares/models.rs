@@ -38,10 +38,19 @@ pub struct PublicEvent {
     pub location: Option<String>,
     pub description: Option<String>,
     pub is_all_day: bool,
+    /// The user who owns this event (the share owner, or a contributor who
+    /// added their calendar). None when the owner is unknown.
+    pub owner_user_id: Option<Uuid>,
+    pub owner_display_name: Option<String>,
 }
 
-pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibility) -> PublicEvent {
-    match visibility {
+pub fn project_event_for_visibility(
+    event: &CalendarEvent,
+    visibility: Visibility,
+    owner_user_id: Option<Uuid>,
+    owner_display_name: Option<String>,
+) -> PublicEvent {
+    let mut projected = match visibility {
         Visibility::Busy => PublicEvent {
             title: None,
             start_time: event.start,
@@ -49,6 +58,8 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             location: None,
             description: None,
             is_all_day: event.is_all_day,
+            owner_user_id,
+            owner_display_name,
         },
         Visibility::TitleTime => PublicEvent {
             title: event.title.clone(),
@@ -57,6 +68,8 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             location: None,
             description: None,
             is_all_day: event.is_all_day,
+            owner_user_id,
+            owner_display_name,
         },
         Visibility::Details => PublicEvent {
             title: event.title.clone(),
@@ -65,8 +78,16 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             location: event.location.clone(),
             description: event.description.clone(),
             is_all_day: event.is_all_day,
+            owner_user_id,
+            owner_display_name,
         },
+    };
+    // Busy/TitleTime visibility still hides the owner's identity from viewers.
+    if visibility != Visibility::Details {
+        projected.owner_user_id = None;
+        projected.owner_display_name = None;
     }
+    projected
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -103,6 +124,7 @@ pub struct ShareEvent {
     pub description: Option<String>,
     pub is_all_day: bool,
     pub created_at: DateTime<chrono::Utc>,
+    pub owner_user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,6 +152,7 @@ pub struct NewShareEvent {
     pub location: Option<String>,
     pub description: Option<String>,
     pub is_all_day: bool,
+    pub owner_user_id: Option<Uuid>,
 }
 
 pub fn validate_share_range(

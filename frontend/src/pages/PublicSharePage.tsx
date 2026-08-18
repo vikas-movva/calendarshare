@@ -1,8 +1,8 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot, useMe } from '../hooks/queries'
+import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot, useMe, useCalendars, useAddContributor } from '../hooks/queries'
 import type { PublicEvent, PollSlot } from '../types/api'
-import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, SunSmall, PollSmall, ClockSmall, UsersSmall, XSmall, CheckSmall } from '../components/Icons'
+import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, SunSmall, PollSmall, ClockSmall, UsersSmall, XSmall, CheckSmall, PlusSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
 import { stagger, slideRight } from '../theme/anim'
 
@@ -32,29 +32,173 @@ function minutesOfDay(iso: string): number {
 }
 
 function layoutDay(events: PublicEvent[]) {
-  const timed = events.filter((e) => !e.is_all_day)
-  if (timed.length === 0) return [] as { ev: PublicEvent; top: number; height: number; lane: number; totalLanes: number }[]
-  const startMin = Math.min(...timed.map((e) => minutesOfDay(e.start_time)))
-  const endMin = Math.max(...timed.map((e) => minutesOfDay(e.end_time)))
-  const windowMin = Math.max(endMin - startMin, 30)
-  const sorted = [...timed].sort((a, b) => minutesOfDay(a.start_time) - minutesOfDay(b.start_time))
-  const laneEnd: number[] = []
-  const out: { ev: PublicEvent; top: number; height: number; lane: number; totalLanes: number }[] = []
-  for (const ev of sorted) {
-    const s = minutesOfDay(ev.start_time)
-    const en = minutesOfDay(ev.end_time)
-    let lane = laneEnd.findIndex((end) => end <= s)
-    if (lane === -1) {
-      lane = laneEnd.length
-      laneEnd.push(en)
-    } else {
-      laneEnd[lane] = en
-    }
-    const top = (s - startMin) / windowMin
-    const height = Math.max((en - s) / windowMin, 0.05)
-    out.push({ ev, top, height, lane, totalLanes: laneEnd.length })
+  type PlacedEvent = {
+    ev: PublicEvent
+    top: number
+    height: number
+    lane: number
+    totalLanes: number
   }
-  return out
+
+  const timed = events.filter((e) => !e.is_all_day)
+
+  if (timed.length === 0) {
+    return [] as PlacedEvent[]
+  }
+
+  const getStart = (ev: PublicEvent) =>
+    minutesOfDay(ev.start_time)
+
+  const getEnd = (ev: PublicEvent) => {
+    const start = getStart(ev)
+    const end = minutesOfDay(ev.end_time)
+
+    // Prevent malformed events from having an end before their start.
+    return Math.max(end, start)
+  }
+
+  const startMin = Math.min(...timed.map(getStart))
+  const endMin = Math.max(...timed.map(getEnd))
+  const windowMin = Math.max(endMin - startMin, 30)
+
+  const sorted = [...timed].sort((a, b) => {
+    const startDiff = getStart(a) - getStart(b)
+
+    if (startDiff !== 0) {
+      return startDiff
+    }
+
+    // For identical starts, longer events come first.
+    return getEnd(b) - getEnd(a)
+  })
+
+  /*
+   * ------------------------------------------------------------
+   * Phase 1: Build overlap groups
+   * ------------------------------------------------------------
+   *
+   * Each group contains events that are connected through
+   * overlapping events.
+   *
+   * Example:
+   *
+   * A: 09 ───────── 12
+   * B:    10 ─ 11
+   * C:          11 ───── 13
+   *
+   * A, B, and C are one group.
+   *
+   * D: 14 ─ 15
+   *
+   * D is a separate group.
+   */
+  const eventGroup = new Map<PublicEvent, number>()
+
+  let currentGroup = 0
+  let currentGroupEnd = -Infinity
+
+  for (const ev of sorted) {
+    const start = getStart(ev)
+    const end = getEnd(ev)
+
+    if (start > currentGroupEnd) {
+      if (eventGroup.size > 0) {
+        currentGroup++
+      }
+
+      currentGroupEnd = end
+    } else {
+      currentGroupEnd = Math.max(currentGroupEnd, end)
+    }
+
+    eventGroup.set(ev, currentGroup)
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * Phase 2: Assign lanes within each group
+   * ------------------------------------------------------------
+   */
+  const groups = new Map<number, PublicEvent[]>()
+
+  for (const ev of sorted) {
+    const group = eventGroup.get(ev)!
+
+    const groupEvents = groups.get(group)
+
+    if (groupEvents) {
+      groupEvents.push(ev)
+    } else {
+      groups.set(group, [ev])
+    }
+  }
+
+  const placed: PlacedEvent[] = []
+
+  for (const [group, groupEvents] of groups) {
+    const laneEnd: number[] = []
+
+    for (const ev of groupEvents) {
+      const start = getStart(ev)
+      const end = getEnd(ev)
+
+      /*
+       * Reuse the first lane whose previous event has ended.
+       *
+       * <= is correct because:
+       *
+       * A: 09:00 - 10:00
+       * B: 10:00 - 11:00
+       *
+       * do not overlap.
+       */
+      let lane = laneEnd.findIndex(
+        (existingEnd) => existingEnd <= start,
+      )
+
+      if (lane === -1) {
+        lane = laneEnd.length
+        laneEnd.push(end)
+      } else {
+        laneEnd[lane] = end
+      }
+
+      const top = (start - startMin) / windowMin
+
+      const height = Math.max(
+        (end - start) / windowMin,
+        0.05,
+      )
+
+      placed.push({
+        ev,
+        top,
+        height,
+        lane,
+        // Filled in after all lanes in this group are known.
+        totalLanes: 0,
+      })
+    }
+
+    /*
+     * Number of lanes required by THIS overlap group.
+     */
+    const totalLanes = laneEnd.length
+
+    for (const placedEvent of placed) {
+      if (eventGroup.get(placedEvent.ev) === group) {
+        placedEvent.totalLanes = totalLanes
+      }
+    }
+  }
+
+  /*
+   * Return events chronologically.
+   */
+  return placed.sort(
+    (a, b) =>
+      getStart(a.ev) - getStart(b.ev),
+  )
 }
 
 function tzParts(d: Date, tz: string): { y: number; m: number; day: number } {
@@ -159,6 +303,17 @@ export default function PublicSharePage() {
   const [voterName, setVoterName] = useState('')
   const [expandedSlot, setExpandedSlot] = useState<string | null>(null)
 
+  const [showAddCalendar, setShowAddCalendar] = useState(false)
+  const [selectedCalendarId, setSelectedCalendarId] = useState('')
+  const [addCalendarError, setAddCalendarError] = useState<string | null>(null)
+  const addContributor = useAddContributor()
+
+  const { data: calendarsData } = useCalendars()
+  const calendars = calendarsData?.calendars ?? []
+  // A logged-in user can add one of their calendars to the share; the backend
+  // rejects calendars the user doesn't own.
+  const canAddCalendar = !!me && calendars.length > 0
+
   useEffect(() => {
     // A logged-in user is auto-identified from /api/me, so the sign-in
     // modal never appears for them and their email/name are pre-filled.
@@ -241,6 +396,21 @@ export default function PublicSharePage() {
     }
   }
 
+  async function handleAddCalendar() {
+    if (!selectedCalendarId) {
+      setAddCalendarError('Please select a calendar.')
+      return
+    }
+    setAddCalendarError(null)
+    try {
+      await addContributor.mutateAsync({ token, calendarId: selectedCalendarId })
+      setSelectedCalendarId('')
+      setShowAddCalendar(false)
+    } catch (err) {
+      setAddCalendarError(err instanceof Error ? err.message : 'Could not add calendar.')
+    }
+  }
+
   if (isLoading) {
     return <div className="card p-8 text-center text-content-muted">Loading…</div>
   }
@@ -264,7 +434,9 @@ export default function PublicSharePage() {
   const polls = data.polls ?? []
 
   return (
-    <div className="mx-auto max-w-2xl">
+    // Extra bottom padding keeps page content clear of the sticky footer
+    // when long poll lists push past the viewport.
+    <div className="mx-auto">
       <AnimatePresence>
         {selected && (
           <motion.div
@@ -298,6 +470,11 @@ export default function PublicSharePage() {
               </div>
               <div className="p-4">
                 <p className="font-semibold text-content">{selected.title || '(busy)'}</p>
+                {selected.owner_display_name && (
+                  <span className="mt-1 text-xs text-content-faint">
+                    {selected.owner_display_name}
+                  </span>
+                )}
                 {selected.location && (
                   <p className="mt-2 text-sm text-content-muted">📍 {selected.location}</p>
                 )}
@@ -313,7 +490,7 @@ export default function PublicSharePage() {
         )}
       </AnimatePresence>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card overflow-hidden">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card mb-6 p-5">
         <div className="flex items-center gap-2.5 border-b border-border bg-accent/5 px-5 py-4">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent/10 text-accent">
             <CalendarSmall />
@@ -328,7 +505,16 @@ export default function PublicSharePage() {
               · {data.timezone}
             </p>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-2">
+            {canAddCalendar && (
+              <button
+                onClick={() => setShowAddCalendar(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-content-muted hover:bg-card hover:text-content"
+                title="Add your calendar to this share"
+              >
+                <PlusSmall /> Add your calendar
+              </button>
+            )}
             <ViewToggle view={view} setView={setView} />
           </div>
         </div>
@@ -352,6 +538,11 @@ export default function PublicSharePage() {
                         {formatEventTime(ev.start_time, ev.is_all_day)} – {formatEventTime(ev.end_time, ev.is_all_day)}
                       </span>
                     </div>
+                    {ev.owner_display_name && (
+                      <span className="mt-0.5 text-xs text-content-faint flex items-center gap-1">
+                        <UsersSmall /> {ev.owner_display_name}
+                      </span>
+                    )}
                     {ev.location && (
                       <p className="truncate text-sm text-content-muted">📍 {ev.location}</p>
                     )}
@@ -384,30 +575,31 @@ export default function PublicSharePage() {
                         <span className="text-xs text-content-muted">{day.getUTCDate()}</span>
                       </div>
                       <div className="mt-1 flex-1 overflow-hidden">
-                        {allDay.length > 0 && (
-                          <div className="space-y-1">
-                            {allDay.slice(0, 2).map((ev, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => setSelected(ev)}
-                                className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25 min-h-[16px]"
-                                title="All day"
-                              >
-                                All day{ev.title ? ` · ${ev.title}` : ''}
-                              </button>
-                            ))}
-                            {allDay.length > 2 && (
-                              <button
-                                type="button"
-                                onClick={() => setSelected(allDay[0])}
-                                className="px-1 text-[10px] text-content-faint hover:text-content"
-                              >
-                                +{allDay.length - 2} more
-                              </button>
-                            )}
-                          </div>
-                        )}
+{allDay.length > 0 && (
+                            <div className="space-y-1">
+                              {allDay.slice(0, 2).map((ev, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => setSelected(ev)}
+                                  className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25 min-h-[16px]"
+                                  title="All day"
+                                >
+                                  All day{ev.title ? ` · ${ev.title}` : ''}
+                                  {ev.owner_display_name ? ` · ${ev.owner_display_name}` : ''}
+                                </button>
+                              ))}
+                              {allDay.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelected(allDay[0])}
+                                  className="px-1 text-[10px] text-content-faint hover:text-content"
+                                >
+                                  +{allDay.length - 2} more
+                                </button>
+                              )}
+                            </div>
+                          )}
                         {positioned.length > 0 && (
                           <div className="relative flex-1 overflow-visible">
                             {positioned.map((p, i) => {
@@ -426,9 +618,9 @@ export default function PublicSharePage() {
                                     left: `${leftPct}%`,
                                     width: `calc(${widthPct}% - 4px)`,
                                   }}
-                                  title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}`}
+                                  title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}${p.ev.owner_display_name ? ` · ${p.ev.owner_display_name}` : ''}`}
                                 >
-                                  <span className="truncate">{formatTime(p.ev.start_time)}</span>
+                                  <span className="text-xs text-content-faint">{formatTime(p.ev.start_time).slice(0, -2)}</span>
                                   {p.ev.title && <span className="truncate">{p.ev.title}</span>}
                                 </button>
                               )
@@ -490,7 +682,7 @@ export default function PublicSharePage() {
             </span>
             <h2 className="font-semibold text-content">Polls</h2>
           </div>
-          <div className="max-h-[70vh] space-y-4 pr-1">
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
             <AnimatePresence>
               {polls.map((poll) => {
                 const maxVotes = Math.max(...poll.slots.map((s: PollSlot) => s.votes.length), 0)
@@ -659,6 +851,67 @@ export default function PublicSharePage() {
                 </button>
                 <button onClick={handleConfirmVoter} disabled={!voterEmail.trim()} className="btn-primary flex-1">
                   Continue
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showAddCalendar && (
+          <motion.div
+            key="addcalendar-backdrop"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { setShowAddCalendar(false); setAddCalendarError(null) }}
+          >
+            <motion.div
+              className="card w-full max-w-sm overflow-hidden p-5"
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-2">
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-accent/10 text-accent">
+                  <CalendarGridSmall />
+                </span>
+                <div>
+                  <p className="font-semibold text-content">Add your calendar</p>
+                  <p className="text-xs text-content-faint">Your events merge into this share's busy times.</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-xs text-content-faint">Your calendar</label>
+                <select
+                  value={selectedCalendarId}
+                  onChange={(e) => setSelectedCalendarId(e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-border bg-field px-3 py-2 text-sm text-content focus:border-accent focus:ring-3 focus:ring-accent/20 focus:outline-none"
+                >
+                  <option value="">Select a calendar…</option>
+                  {calendars.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                {calendars.length === 0 && (
+                  <p className="mt-2 text-xs text-content-faint">
+                    No calendars found. Connect your Google account to add one.
+                  </p>
+                )}
+                {addCalendarError && (
+                  <p className="mt-2 text-sm text-red-400">{addCalendarError}</p>
+                )}
+              </div>
+              <div className="mt-5 flex gap-2">
+                <button onClick={() => { setShowAddCalendar(false); setAddCalendarError(null) }} className="btn-ghost flex-1">
+                  Cancel
+                </button>
+                <button onClick={handleAddCalendar} disabled={!selectedCalendarId || addContributor.isPending} className="btn-primary flex-1">
+                  {addContributor.isPending ? 'Adding…' : 'Add'}
                 </button>
               </div>
             </motion.div>

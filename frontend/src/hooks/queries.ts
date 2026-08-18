@@ -76,10 +76,14 @@ export function useAddContributor() {
   return useMutation({
     mutationFn: ({ shareId, token, calendarId }: { shareId?: string; token?: string; calendarId: string }) =>
       token ? api.addContributorByToken(token, calendarId) : api.addContributor(shareId!, calendarId),
+    // Adding a calendar merges new events into the share, which changes the
+    // busy-time snapshot, free slots, and any polls built from it. Invalidate
+    // every derived cache so the public page re-renders with the new data.
     onSuccess: (_data, { shareId, token }) => {
       if (token) {
         qc.invalidateQueries({ queryKey: ["public", token] });
         qc.invalidateQueries({ queryKey: ["free-slots", "public", token] });
+        qc.invalidateQueries({ queryKey: ["polls", shareId] });
       } else if (shareId) {
         qc.invalidateQueries({ queryKey: ["free-slots", shareId] });
       }

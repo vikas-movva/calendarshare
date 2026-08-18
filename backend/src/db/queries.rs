@@ -184,8 +184,8 @@ pub async fn create_share_events(
         sqlx::query(
             r#"
             INSERT INTO share_events
-                (id, share_id, provider_event_id, title, start_time, end_time, location, description, is_all_day)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (id, share_id, provider_event_id, title, start_time, end_time, location, description, is_all_day, owner_user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(event.id)
@@ -197,6 +197,7 @@ pub async fn create_share_events(
         .bind(&event.location)
         .bind(&event.description)
         .bind(event.is_all_day)
+        .bind(event.owner_user_id)
         .execute(&mut *tx)
         .await?;
     }
@@ -326,7 +327,7 @@ pub async fn add_share_contributor(
 }
 
 pub async fn list_contributor_calendars(
-    pool: &PgPool,
+    pool: &crate::db::PgPool,
     user_id: Uuid,
 ) -> sqlx::Result<Vec<crate::calendar::models::Calendar>> {
     let rows = sqlx::query_as::<_, crate::calendar::models::Calendar>(
@@ -341,4 +342,39 @@ pub async fn list_contributor_calendars(
     .fetch_all(pool)
     .await?;
     Ok(rows)
+}
+
+/// Calendars a contributor has added to a specific share, with their names.
+pub async fn list_contributor_calendars_for_share(
+    pool: &crate::db::PgPool,
+    share_id: Uuid,
+    user_id: Uuid,
+) -> sqlx::Result<Vec<crate::calendar::models::Calendar>> {
+    let rows = sqlx::query_as::<_, crate::calendar::models::Calendar>(
+        r#"
+        SELECT c.* FROM calendars c
+        JOIN share_contributors sc ON sc.calendar_id = c.id
+        WHERE sc.share_id = $1 AND sc.user_id = $2
+        ORDER BY c.name
+        "#,
+    )
+    .bind(share_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Fetch display names for a set of user ids, keyed by user id.
+pub async fn get_display_names_by_ids(
+    pool: &crate::db::PgPool,
+    user_ids: &[Uuid],
+) -> sqlx::Result<std::collections::HashMap<Uuid, Option<String>>> {
+    let rows: Vec<(Uuid, Option<String>)> = sqlx::query_as(
+        "SELECT id, display_name FROM users WHERE id = ANY($1)",
+    )
+    .bind(user_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
 }

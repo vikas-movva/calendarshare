@@ -63,6 +63,16 @@ pub fn validate_share_range(
     crate::shares::models::validate_share_range(start, end)
 }
 
-pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibility) -> PublicEvent {
-    crate::shares::models::project_event_for_visibility(event, visibility)
+pub fn project_event_for_visibility(
+    event: &CalendarEvent,
+    visibility: Visibility,
+    owner_user_id: Option<Uuid>,
+    owner_display_name: Option<String>,
+) -> PublicEvent {
+    crate::shares::models::project_event_for_visibility(
+        event,
+        visibility,
+        owner_user_id,
+        owner_display_name,
+    )
 }

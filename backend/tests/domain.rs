@@ -26,7 +26,7 @@ fn event(title: &str, start: &str, end: &str) -> CalendarEvent {
 #[test]
 fn busy_visibility_exposes_only_times() {
     let e = event("Secret", "2026-08-21T10:00:00Z", "2026-08-21T11:00:00Z");
-    let projected = project_event_for_visibility(&e, Visibility::Busy);
+    let projected = project_event_for_visibility(&e, Visibility::Busy, None, None);
     assert_eq!(projected.title, None);
     assert_eq!(projected.location, None);
     assert_eq!(projected.description, None);
@@ -35,7 +35,7 @@ fn busy_visibility_exposes_only_times() {
 #[test]
 fn title_time_visibility_exposes_title_and_times() {
     let e = event("Dinner", "2026-08-21T23:00:00Z", "2026-08-22T01:00:00Z");
-    let projected = project_event_for_visibility(&e, Visibility::TitleTime);
+    let projected = project_event_for_visibility(&e, Visibility::TitleTime, None, None);
     assert_eq!(projected.title.as_deref(), Some("Dinner"));
     assert_eq!(projected.location, None);
     assert_eq!(projected.description, None);
@@ -44,10 +44,41 @@ fn title_time_visibility_exposes_title_and_times() {
 #[test]
 fn details_visibility_exposes_all_fields() {
     let e = event("Dinner", "2026-08-21T23:00:00Z", "2026-08-22T01:00:00Z");
-    let projected = project_event_for_visibility(&e, Visibility::Details);
+    let projected = project_event_for_visibility(&e, Visibility::Details, None, None);
     assert_eq!(projected.title.as_deref(), Some("Dinner"));
     assert_eq!(projected.location.as_deref(), Some("Cafe"));
     assert_eq!(projected.description.as_deref(), Some("Notes"));
+}
+
+#[test]
+fn owner_is_hidden_under_busy_and_title_time() {
+    let owner = uuid::uuid!("11111111-1111-1111-1111-111111111111");
+    let e = event("Secret", "2026-08-21T10:00:00Z", "2026-08-21T11:00:00Z");
+    assert_eq!(
+        project_event_for_visibility(&e, Visibility::Busy, Some(owner), Some("Alice".to_string()))
+            .owner_user_id,
+        None
+    );
+    assert_eq!(
+        project_event_for_visibility(
+            &e,
+            Visibility::TitleTime,
+            Some(owner),
+            Some("Alice".to_string())
+        )
+        .owner_display_name,
+        None
+    );
+}
+
+#[test]
+fn owner_is_exposed_under_details() {
+    let owner = uuid::uuid!("11111111-1111-1111-1111-111111111111");
+    let e = event("Dinner", "2026-08-21T23:00:00Z", "2026-08-22T01:00:00Z");
+    let projected =
+        project_event_for_visibility(&e, Visibility::Details, Some(owner), Some("Alice".to_string()));
+    assert_eq!(projected.owner_user_id, Some(owner));
+    assert_eq!(projected.owner_display_name.as_deref(), Some("Alice"));
 }
 
 #[test]
