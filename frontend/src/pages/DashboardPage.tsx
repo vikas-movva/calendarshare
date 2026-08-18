@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
 import { useMe, useCalendars, useShares } from '../hooks/queries'
 import { CalendarSmall, UsersSmall, ClockSmall, PlusSmall } from '../components/Icons'
 import { fadeUp, stagger } from '../theme/anim'

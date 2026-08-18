@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useTheme } from '../theme/ThemeContext'
+import { useTheme } from '../theme/useTheme'
 import { themes, themeOrder, themeLabels, type ThemeName } from '../theme/theme'
 
 export default function ThemeControls({

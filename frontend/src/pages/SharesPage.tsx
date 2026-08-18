@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { useShares, useRevokeShare } from '../hooks/queries'
 import { CopySmall, TrashSmall, EyeSmall } from '../components/Icons'
 import { motion } from 'framer-motion'

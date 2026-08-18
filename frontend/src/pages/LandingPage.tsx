@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useMe } from '../hooks/queries'
-import { CalendarSmall, PlusSmall, ArrowLeftSmall } from '../components/Icons'
+import { CalendarSmall } from '../components/Icons'
 
 export default function LandingPage() {
   const { data: user } = useMe()

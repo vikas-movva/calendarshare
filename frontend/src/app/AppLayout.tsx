@@ -1,14 +1,12 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMe } from '../hooks/queries'
-import { useTheme } from '../theme/ThemeContext'
 import ThemeControls from '../components/ThemeControls'
 import { CalendarSmall } from '../components/Icons'
 
 function PageTransition() {
   const location = useLocation()
 
-  const direction = location.state?.direction || 1
   const variants = {
     initial: { opacity: 0, x: 48 },
     animate: { opacity: 1, x: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
@@ -30,7 +28,6 @@ function PageTransition() {
 }
 
 export default function AppLayout() {
-  const { mode } = useTheme()
   const { data: user } = useMe()
   const loc = useLocation()
   const isDashboard = loc.pathname === '/dashboard'

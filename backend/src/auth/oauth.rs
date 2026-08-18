@@ -22,8 +22,8 @@ pub struct OAuthCallbackQuery {
 }
 
 pub trait OauthClient: Send + Sync {
-    fn auth_url(&self) -> String;
-    async fn handle_callback(&self, code: String) -> Result<CallbackResult, AppError>;
+    fn auth_url(&self, redirect_uri: &str) -> String;
+    async fn handle_callback(&self, code: &str, redirect_uri: &str) -> Result<CallbackResult, AppError>;
 }
 
 pub struct CallbackResult {
@@ -43,7 +43,7 @@ impl GoogleOauthClient {
         Self { config, pool }
     }
 
-    fn auth_url(&self) -> String {
+    fn auth_url(&self, redirect_uri: &str) -> String {
         let scopes = [
             "https://www.googleapis.com/auth/calendar.readonly",
             "openid",
@@ -60,7 +60,7 @@ access_type=offline&\
 prompt=consent&\
 state=calendarshare",
             urlencoding::encode(&self.config.google_client_id_or("")),
-            urlencoding::encode(&self.config.google_redirect_uri_or("")),
+            urlencoding::encode(redirect_uri),
             urlencoding::encode(&scopes.join(" ")),
         )
     }
@@ -68,6 +68,7 @@ state=calendarshare",
     async fn exchange_code(
         &self,
         code: &str,
+        redirect_uri: &str,
     ) -> Result<crate::calendar::models::GoogleTokenResponse, reqwest::Error> {
         let client = reqwest::Client::new();
         client
@@ -80,10 +81,7 @@ state=calendarshare",
                 ),
                 ("code", code),
                 ("grant_type", "authorization_code"),
-                (
-                    "redirect_uri",
-                    self.config.google_redirect_uri_or("").as_str(),
-                ),
+                ("redirect_uri", redirect_uri),
             ])
             .send()
             .await?
@@ -94,13 +92,13 @@ state=calendarshare",
 }
 
 impl OauthClient for GoogleOauthClient {
-    fn auth_url(&self) -> String {
-        self.auth_url()
+    fn auth_url(&self, redirect_uri: &str) -> String {
+        self.auth_url(redirect_uri)
     }
 
-    async fn handle_callback(&self, code: String) -> Result<CallbackResult, AppError> {
+    async fn handle_callback(&self, code: &str, redirect_uri: &str) -> Result<CallbackResult, AppError> {
         let token = self
-            .exchange_code(&code)
+            .exchange_code(code, redirect_uri)
             .await
             .map_err(|e| AppError::CalendarProviderUnavailable(e.to_string()))?;
 
@@ -167,13 +165,18 @@ fn set_cookie_header(value: &str, max_age: i64) -> HeaderValue {
     cookie.parse().expect("invalid cookie header")
 }
 
-pub async fn login(State(state): State<AuthState>) -> impl IntoResponse {
+pub async fn login(
+    State(state): State<AuthState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let redirect_uri = redirect_uri_from_request(&headers, &state.config);
     let client = GoogleOauthClient::new(state.config.clone(), state.pool.clone());
-    Redirect::temporary(&client.auth_url())
+    Redirect::temporary(&client.auth_url(&redirect_uri))
 }
 
 pub async fn callback(
     State(state): State<AuthState>,
+    headers: HeaderMap,
     Query(query): Query<OAuthCallbackQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     if let Some(err) = query.error {
@@ -183,8 +186,12 @@ pub async fn callback(
         .code
         .ok_or(AppError::AuthError("missing code".into()))?;
 
+    // Derive the redirect URI from the request itself so the token exchange
+    // matches the URI used in the authorization request — this makes the flow
+    // work on any domain (custom domain, onrender.com, localhost, etc.).
+    let redirect_uri = redirect_uri_from_request(&headers, &state.config);
     let client = GoogleOauthClient::new(state.config.clone(), state.pool.clone());
-    let result = client.handle_callback(code).await?;
+    let result = client.handle_callback(&code, &redirect_uri).await?;
 
     let cookie_value = format!("{}:{}", result.user_id, result.signature);
     let mut headers = HeaderMap::new();
@@ -201,6 +208,22 @@ pub async fn callback(
             .trim_end_matches('/')
     );
     Ok((headers, Redirect::temporary(&redirect)))
+}
+
+/// Build the OAuth redirect URI from the incoming request's Host header, so the
+/// flow works on any domain without configuring a separate URI per environment.
+/// Falls back to the configured value when the header is absent (e.g. tests).
+fn redirect_uri_from_request(headers: &HeaderMap, config: &Config) -> String {
+    if let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) {
+        // Preserve the scheme: assume https in production, http on localhost.
+        let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
+            "http"
+        } else {
+            "https"
+        };
+        return format!("{}://{}/auth/google/callback", scheme, host);
+    }
+    config.google_redirect_uri_or("http://localhost:3000/auth/google/callback")
 }
 
 pub async fn logout(State(state): State<AuthState>) -> impl IntoResponse {

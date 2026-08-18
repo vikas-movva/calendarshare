@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 import { usePublicShare } from '../hooks/queries'
 import { CalendarSmall, EyeSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
-import { fadeUp, stagger, slideRight } from '../theme/anim'
+import { stagger, slideRight } from '../theme/anim'
 
 export default function PublicSharePage() {
   const { token = '' } = useParams()
