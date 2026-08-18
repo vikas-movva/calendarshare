@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMe, useCalendars, useCreateShare } from '../hooks/queries'
 import { CalendarSmall, CopySmall, ArrowLeftSmall } from '../components/Icons'
@@ -33,12 +33,7 @@ export default function NewSharePage() {
   const { data: calendars } = useCalendars()
   const createShare = useCreateShare()
 
-  if (!meLoading && !user) {
-    window.location.href = '/auth/login'
-    return null
-  }
-
-  const calendarsList = calendars?.calendars || []
+  const calendarsList = useMemo(() => calendars?.calendars || [], [calendars])
   const [calendarId, setCalendarId] = useState<string>('')
 
   // Pre-select the calendar passed from the dashboard (?calendar=<id>).
@@ -55,6 +50,11 @@ export default function NewSharePage() {
   const [expiration, setExpiration] = useState('7d')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ url: string } | null>(null)
+
+  if (!meLoading && !user) {
+    window.location.href = '/auth/login'
+    return null
+  }
 
   const selectedCalendar = calendarsList.find((c) => c.id === calendarId)
 
