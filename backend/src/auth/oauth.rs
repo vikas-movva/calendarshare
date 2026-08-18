@@ -202,12 +202,24 @@ pub async fn callback(
 
     let redirect = format!(
         "{}/dashboard",
-        state
-            .config
-            .public_base_url_or("http://localhost:3000")
-            .trim_end_matches('/')
+        redirect_origin(&headers, &state.config).trim_end_matches('/')
     );
     Ok((headers, Redirect::temporary(&redirect)))
+}
+
+/// Build the post-login redirect origin from the incoming request's Host
+/// header. The session cookie is set on this same origin, so the user stays
+/// on one origin (works on onrender.com, custom domains, and localhost).
+fn redirect_origin(headers: &HeaderMap, config: &Config) -> String {
+    if let Some(host) = headers.get("host").and_then(|v| v.to_str().ok()) {
+        let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
+            "http"
+        } else {
+            "https"
+        };
+        return format!("{}://{}", scheme, host);
+    }
+    config.public_base_url_or("http://localhost:3000")
 }
 
 /// Build the OAuth redirect URI from the incoming request's Host header, so the
