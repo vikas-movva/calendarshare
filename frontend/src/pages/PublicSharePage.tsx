@@ -25,8 +25,6 @@ function minutesOfDay(iso: string): number {
   return d.getUTCHours() * 60 + d.getUTCMinutes()
 }
 
-const TIMELINE_HEIGHT = 200
-
 function layoutDay(events: PublicEvent[]) {
   const timed = events.filter((e) => !e.is_all_day)
   if (timed.length === 0) return [] as { ev: PublicEvent; top: number; height: number; lane: number; totalLanes: number }[]
@@ -46,8 +44,8 @@ function layoutDay(events: PublicEvent[]) {
     } else {
       laneEnd[lane] = en
     }
-    const top = ((s - startMin) / windowMin) * TIMELINE_HEIGHT
-    const height = Math.max(((en - s) / windowMin) * TIMELINE_HEIGHT, 16)
+    const top = (s - startMin) / windowMin
+    const height = Math.max((en - s) / windowMin, 0.05)
     out.push({ ev, top, height, lane, totalLanes: laneEnd.length })
   }
   return out
@@ -201,75 +199,74 @@ export default function PublicSharePage() {
                 const dayEvents = data.events.filter((ev) => sameDay(new Date(ev.start_time), day))
                 const allDay = dayEvents.filter((ev) => ev.is_all_day)
                 const positioned = layoutDay(dayEvents)
-                const maxLanes = positioned.reduce((m, p) => Math.max(m, p.totalLanes), 0)
-                const timelineHeight = positioned.length
-                  ? TIMELINE_HEIGHT + Math.max(maxLanes - 1, 0) * 14
-                  : 0
-                const cellHeight = allDay.length > 0 || positioned.length > 0 ? 220 : 96
                 return (
-                  <div key={key} className="min-h-[96px] bg-surface p-1.5" style={{ minHeight: cellHeight }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-content-muted">{day.getDate()}</span>
-                    </div>
-                    {allDay.length > 0 && (
-                      <div className="mt-1 space-y-1">
-                        {allDay.slice(0, 2).map((ev, i) => (
+                  <div key={key} className="aspect-square min-h-0 bg-surface p-1.5">
+                    <div className="flex h-full flex-col">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-content-muted">{day.getDate()}</span>
+                      </div>
+                      <div className="mt-1 flex-1 overflow-hidden">
+                        {allDay.length > 0 && (
+                          <div className="space-y-1">
+                            {allDay.slice(0, 2).map((ev, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => setSelected(ev)}
+                                className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25"
+                                title="All day"
+                              >
+                                All day{ev.title ? ` · ${ev.title}` : ''}
+                              </button>
+                            ))}
+                            {allDay.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelected(allDay[0])}
+                                className="px-1 text-[10px] text-content-faint hover:text-content"
+                              >
+                                +{allDay.length - 2} more
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {positioned.length > 0 && (
+                          <div className="relative flex-1">
+                            {positioned.map((p, i) => {
+                              const widthPct = 100 / p.totalLanes
+                              const leftPct = p.lane * widthPct
+                              return (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => setSelected(p.ev)}
+                                  className="absolute overflow-hidden truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] leading-tight text-accent hover:bg-accent/25"
+                                  style={{
+                                    top: `${p.top * 100}%`,
+                                    height: `${p.height * 100}%`,
+                                    left: `${leftPct}%`,
+                                    width: `calc(${widthPct}% - 4px)`,
+                                  }}
+                                  title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}`}
+                                >
+                                  {formatTime(p.ev.start_time)}
+                                  {p.ev.title ? ` · ${p.ev.title}` : ''}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {dayEvents.length > positioned.length + allDay.length && (
                           <button
-                            key={i}
                             type="button"
-                            onClick={() => setSelected(ev)}
-                            className="w-full truncate rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/25"
-                            title="All day"
+                            onClick={() => setSelected(dayEvents[0])}
+                            className="mt-1 px-1 text-[10px] text-content-faint hover:text-content"
                           >
-                            All day{ev.title ? ` · ${ev.title}` : ''}
-                          </button>
-                        ))}
-                        {allDay.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => setSelected(allDay[0])}
-                            className="px-1.5 text-[10px] text-content-faint hover:text-content"
-                          >
-                            +{allDay.length - 2} more
+                            +{dayEvents.length - positioned.length - allDay.length} more
                           </button>
                         )}
                       </div>
-                    )}
-                    {positioned.length > 0 && (
-                      <div className="relative mt-1" style={{ height: timelineHeight }}>
-                        {positioned.map((p, i) => {
-                          const widthPct = 100 / p.totalLanes
-                          const leftPct = p.lane * widthPct
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => setSelected(p.ev)}
-                              className="absolute overflow-hidden truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] leading-tight text-accent hover:bg-accent/25"
-                              style={{
-                                top: p.top,
-                                height: p.height,
-                                left: `${leftPct}%`,
-                                width: `calc(${widthPct}% - 4px)`,
-                              }}
-                              title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}`}
-                            >
-                              {formatTime(p.ev.start_time)}
-                              {p.ev.title ? ` · ${p.ev.title}` : ''}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                    {dayEvents.length > positioned.length + allDay.length && (
-                      <button
-                        type="button"
-                        onClick={() => setSelected(dayEvents[0])}
-                        className="mt-1 px-1.5 text-[10px] text-content-faint hover:text-content"
-                      >
-                        +{dayEvents.length - positioned.length - allDay.length} more
-                      </button>
-                    )}
+                    </div>
                   </div>
                 )
               })}
