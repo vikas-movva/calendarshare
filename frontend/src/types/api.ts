@@ -53,6 +53,7 @@ export interface PublicEvent {
   end_time: string;
   location: string | null;
   description: string | null;
+  is_all_day: boolean;
 }
 
 export interface PublicShareResponse {

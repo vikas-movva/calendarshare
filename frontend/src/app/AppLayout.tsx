@@ -66,16 +66,16 @@ function ProfileMenu() {
           <Link
             to="/shares"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-content-muted hover:bg-card"
+            className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm text-content-muted transition-colors hover:bg-card hover:text-content"
           >
             <ShareSmall />
             Shares
           </Link>
           <button
             onClick={() => (window.location.href = '/auth/logout')}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-content-muted hover:bg-card"
+            className="flex w-full items-center gap-2 rounded-lg px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-card hover:text-red-300"
           >
-            <LogOutSmall />
+            <LogOutSmall color="#f87171" />
             Log out
           </button>
         </div>

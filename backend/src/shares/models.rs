@@ -37,6 +37,7 @@ pub struct PublicEvent {
     pub end_time: DateTime<chrono::Utc>,
     pub location: Option<String>,
     pub description: Option<String>,
+    pub is_all_day: bool,
 }
 
 pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibility) -> PublicEvent {
@@ -47,6 +48,7 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             end_time: event.end,
             location: None,
             description: None,
+            is_all_day: event.is_all_day,
         },
         Visibility::TitleTime => PublicEvent {
             title: event.title.clone(),
@@ -54,6 +56,7 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             end_time: event.end,
             location: None,
             description: None,
+            is_all_day: event.is_all_day,
         },
         Visibility::Details => PublicEvent {
             title: event.title.clone(),
@@ -61,6 +64,7 @@ pub fn project_event_for_visibility(event: &CalendarEvent, visibility: Visibilit
             end_time: event.end,
             location: event.location.clone(),
             description: event.description.clone(),
+            is_all_day: event.is_all_day,
         },
     }
 }
