@@ -1,9 +1,9 @@
 # render.yaml — CalendarShare
 #
-# One binary, one Postgres, one domain — all free on Render.
+# One binary, one Postgres — all free on Render.
 #   - Web Service: free 0.5 vCPU / 256 MB RAM, auto-deploys on `git push`.
 #   - Managed Postgres: free 256 MB storage.
-#   - Custom domain + auto SSL (Let's Encrypt), free.
+#   - Served on Render's default domain: https://calendershare.onrender.com
 #
 # Deploy from this directory with:
 #   render deploy --config render.yaml
@@ -31,14 +31,14 @@ services:
       - key: FRONTEND_DIR
         value: ./frontend/dist
       - key: PUBLIC_BASE_URL
-        value: https://calendarshare.app
+        value: https://calendershare.onrender.com
       - key: GOOGLE_CLIENT_ID
         # Set your production Client ID in the Render dashboard (never commit it).
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REDIRECT_URI
-        value: https://calendarshare.app/auth/google/callback
+        value: https://calendershare.onrender.com/auth/google/callback
       - key: SESSION_SECRET
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
@@ -62,10 +62,12 @@ databases:
     # (Render has no direct "postStart"; the binary runs migrations at startup.)
 
 # ---------------------------------------------------------------------------
-# Custom domain + auto SSL
+# Custom domain (optional)
 # ---------------------------------------------------------------------------
-domains:
-  - calendarshare.app
+# domains:
+#   - your-custom-domain.com
+# If you add a custom domain later, uncomment and update the env vars above
+# (PUBLIC_BASE_URL / GOOGLE_REDIRECT_URI) to match it.
 
 # ---------------------------------------------------------------------------
 # Persistent storage for any local state (none required for MVP)

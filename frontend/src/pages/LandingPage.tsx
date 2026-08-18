@@ -72,7 +72,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <div className="mt-3 rounded-lg bg-surface-alt/60 px-3 py-2 text-center">
-                <p className="text-xs text-content-faint">calendarshare.app/s/8f3a2c9d</p>
+                <p className="text-xs text-content-faint">calendershare.onrender.com/s/8f3a2c9d</p>
               </div>
             </div>
           </div>

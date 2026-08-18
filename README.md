@@ -161,12 +161,15 @@ This is the step-by-step checklist to take CalendarShare live.
 ### 0. Pick a domain
 
 Use one domain for everything. The backend serves the frontend, so there is only
-one origin and no CORS issues.
+one origin and no CORS issues. The app is currently deployed on Render's
+default domain:
 
 | Component | URL |
 |-----------|-----|
-| Frontend + backend | `https://calendarshare.app` |
-| Public share | `https://calendarshare.app/s/<token>` |
+| Frontend + backend | `https://calendershare.onrender.com` |
+| Public share | `https://calendershare.onrender.com/s/<token>` |
+
+If you later add a custom domain, update the env vars below to match it.
 
 ### 1. Google Cloud — OAuth + Calendar API
 
@@ -178,10 +181,11 @@ one origin and no CORS issues.
    - User support email: your email
    - Developer contact information: your email
    - App domains: your production domain
-   - Authorized redirect URIs: `https://calendarshare.app/auth/google/callback`
+   - Authorized redirect URIs: `https://calendershare.onrender.com/auth/google/callback`
+     (add `http://localhost:3000/auth/google/callback` for local dev)
 5. **APIs & Services → Credentials →** create **OAuth 2.0 Client IDs** (Web application).
-   - Authorized redirect URI: `https://calendarshare.app/auth/google/callback`
-   - (For local dev also add `http://localhost:3000/auth/google/callback`.)
+   - Authorized redirect URI: `https://calendershare.onrender.com/auth/google/callback`
+     (For local dev also add `http://localhost:3000/auth/google/callback`.)
 6. Copy the **Client ID** and **Client Secret** — these go into the Render env.
 
 Required scopes (already requested in code):
@@ -215,21 +219,16 @@ are left blank for you to fill in):
 |----------|-------|
 | `GOOGLE_CLIENT_ID` | from step 1 |
 | `GOOGLE_CLIENT_SECRET` | from step 1 |
-| `GOOGLE_REDIRECT_URI` | `https://calendarshare.app/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | `https://calendershare.onrender.com/auth/google/callback` |
 | `SESSION_SECRET` | from step 2 |
 | `TOKEN_ENCRYPTION_KEY` | from step 2 |
-| `PUBLIC_BASE_URL` | `https://calendarshare.app` |
+| `PUBLIC_BASE_URL` | `https://calendershare.onrender.com` |
 
 `DATABASE_URL` is injected automatically from the Managed Postgres.
 
-### 5. Add a custom domain + SSL
+### 5. Smoke test the full flow
 
-In the Render dashboard: **Settings → Custom Domain →** add `calendarshare.app`.
-Render provisions a Let's Encrypt certificate automatically.
-
-### 6. Smoke test the full flow
-
-1. Open `https://calendarshare.app` in a browser.
+1. Open `https://calendershare.onrender.com` in a browser.
 2. Click **Sign in** → Google OAuth → grant calendar access.
 3. You land on the dashboard.
 4. Click **Create share**, pick a calendar, date range, visibility, expiration.
