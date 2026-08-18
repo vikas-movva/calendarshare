@@ -105,20 +105,31 @@ export function useListPolls(shareId: string | null) {
     enabled: !!shareId,
   });
 }
-
 export function useVoteSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ slotId, email, displayName }: { slotId: string; email: string; displayName: string | null }) =>
       api.vote(slotId, email, displayName),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["public"] }),
+    // Votes live in two caches: the public share page (polls are embedded in
+    // the share response) and the logged-in polls page. Invalidate both so the
+    // Voted chip re-renders immediately after voting from either surface.
+    onSuccess: (_data, { slotId }) => {
+      qc.invalidateQueries({ queryKey: ["public"] });
+      qc.invalidateQueries({ queryKey: ["polls"] });
+      qc.invalidateQueries({ queryKey: ["poll", slotId] });
+    },
   });
 }
 
 export function useUnvoteSlot() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slotId, email }: { slotId: string; email: string }) => api.unvote(slotId, email),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["public"] }),
+    mutationFn: ({ slotId, email }: { slotId: string; email: string }) =>
+      api.unvote(slotId, email),
+    onSuccess: (_data, { slotId }) => {
+      qc.invalidateQueries({ queryKey: ["public"] });
+      qc.invalidateQueries({ queryKey: ["polls"] });
+      qc.invalidateQueries({ queryKey: ["poll", slotId] });
+    },
   });
 }

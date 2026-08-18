@@ -18,12 +18,18 @@ const EXPIRATION_OPTIONS = [
   { value: 'never', label: 'Never', ms: null },
 ] as const
 
-function startOfDayUTC(d: Date) {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0))
+// Parse "YYYY-MM-DD" directly into a UTC Date. Avoid new Date(dateStr)
+// plus local-time getters: date-only strings parse as UTC midnight, but
+// .getDate()/.getMonth() run in local time and shift the day backward for
+// timezones behind UTC (e.g. US).
+function startOfDayUTC(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0))
 }
 
-function endOfDayUTC(d: Date) {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59))
+function endOfDayUTC(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59))
 }
 
 export default function NewSharePage() {
@@ -70,8 +76,8 @@ export default function NewSharePage() {
     if (!calendarId) { setError('Please select a calendar.'); return }
     if (!startDate || !endDate) { setError('Please choose a date range.'); return }
 
-    const start = startOfDayUTC(new Date(startDate))
-    const end = endOfDayUTC(new Date(endDate))
+    const start = startOfDayUTC(startDate)
+    const end = endOfDayUTC(endDate)
     if (start >= end) { setError('End date must be after start date.'); return }
 
     const exp = EXPIRATION_OPTIONS.find((o) => o.value === expiration)

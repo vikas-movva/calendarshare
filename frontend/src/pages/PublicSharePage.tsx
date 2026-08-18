@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot } from '../hooks/queries'
+import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot, useMe } from '../hooks/queries'
 import type { PublicEvent, PollSlot } from '../types/api'
 import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, SunSmall, PollSmall, ClockSmall, UsersSmall, XSmall, CheckSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -57,43 +57,58 @@ function layoutDay(events: PublicEvent[]) {
   return out
 }
 
-function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+function tzParts(d: Date, tz: string): { y: number; m: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d)
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value)
+  return { y: get("year"), m: get("month") - 1, day: get("day") }
 }
 
-function sameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
+function dayKeyInTz(iso: string, tz: string): string {
+  const { y, m, day } = tzParts(new Date(iso), tz)
+  const mm = `${m + 1}`.padStart(2, "0")
+  const dd = `${day}`.padStart(2, "0")
+  return `${y}-${mm}-${dd}`
 }
 
-function dayKey(d: Date) {
-  const m = `${d.getMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getDate()}`.padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
-
-function buildCalendarDays(start: Date, end: Date) {
+// Enumerate the calendar days in the share's range as UTC-midnight Dates,
+// derived from the share timezone so the grid matches the owner's calendar
+// regardless of the viewer's browser timezone.
+function buildCalendarDays(start: Date, end: Date, tz: string) {
+  const a = tzParts(start, tz)
+  const b = tzParts(end, tz)
   const days: Date[] = []
-  const cursor = startOfDay(start)
-  const last = startOfDay(end)
+  const cursor = new Date(Date.UTC(a.y, a.m, a.day))
+  const last = new Date(Date.UTC(b.y, b.m, b.day))
   while (cursor <= last) {
     days.push(new Date(cursor))
-    cursor.setDate(cursor.getDate() + 1)
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
   return days
 }
 
-function dayLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+function dayKey(d: Date): string {
+  const m = `${d.getUTCMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getUTCDate()}`.padStart(2, '0')
+  return `${d.getUTCFullYear()}-${m}-${day}`
 }
 
-function groupSlotsByDay(slots: { start: string; end: string }[]) {
+function sameDayInTz(iso: string, day: Date, tz: string): boolean {
+  return dayKeyInTz(iso, tz) === dayKey(day)
+}
+
+function dayLabel(iso: string, tz: string): string {
+  return new Date(iso).toLocaleDateString([], { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function groupSlotsByDay(slots: { start: string; end: string }[], tz: string) {
   const grouped = new Map<string, { start: string; end: string }[]>()
   for (const slot of slots) {
-    const key = dayKey(new Date(slot.start))
+    const key = dayKeyInTz(slot.start, tz)
     const arr = grouped.get(key) ?? []
     arr.push(slot)
     grouped.set(key, arr)
@@ -130,6 +145,7 @@ export default function PublicSharePage() {
   const { token = '' } = useParams()
   const { data, isLoading, error } = usePublicShare(token)
   const { data: freeData, isLoading: freeLoading, error: freeError } = usePublicFreeSlots(token)
+  const { data: me } = useMe()
   const voteSlot = useVoteSlot()
   const unvoteSlot = useUnvoteSlot()
 
@@ -141,15 +157,28 @@ export default function PublicSharePage() {
   const [pendingSlot, setPendingSlot] = useState<string | null>(null)
   const [voterEmail, setVoterEmail] = useState('')
   const [voterName, setVoterName] = useState('')
+  const [expandedSlot, setExpandedSlot] = useState<string | null>(null)
 
   useEffect(() => {
+    // A logged-in user is auto-identified from /api/me, so the sign-in
+    // modal never appears for them and their email/name are pre-filled.
+    if (me?.email) {
+      const v = { email: me.email, displayName: me.display_name || '' }
+      setVoter(v)
+      try {
+        localStorage.setItem(VOTER_KEY, JSON.stringify(v))
+      } catch {
+        // ignore
+      }
+      return
+    }
     try {
       const raw = localStorage.getItem(VOTER_KEY)
       if (raw) setVoter(JSON.parse(raw))
     } catch {
       // ignore
     }
-  }, [])
+  }, [me?.email, me?.display_name])
 
   function saveVoter(email: string, displayName: string) {
     const v = { email, displayName }
@@ -164,6 +193,18 @@ export default function PublicSharePage() {
   async function handleVote(slotId: string) {
     if (!voter) {
       setPendingSlot(slotId)
+      // Pre-fill the modal from any previously-stored voter so a returning
+      // anonymous visitor doesn't have to retype.
+      try {
+        const raw = localStorage.getItem(VOTER_KEY)
+        if (raw) {
+          const stored = JSON.parse(raw) as { email: string; displayName: string }
+          setVoterEmail(stored.email || '')
+          setVoterName(stored.displayName || '')
+        }
+      } catch {
+        // ignore
+      }
       setShowVoter(true)
       return
     }
@@ -218,7 +259,7 @@ export default function PublicSharePage() {
     )
   }
 
-  const days = buildCalendarDays(new Date(data.range.start), new Date(data.range.end))
+  const days = buildCalendarDays(new Date(data.range.start), new Date(data.range.end), data.timezone)
   const freeSlots = freeData?.slots ?? []
   const polls = data.polls ?? []
 
@@ -333,14 +374,14 @@ export default function PublicSharePage() {
               ))}
               {days.map((day) => {
                 const key = dayKey(day)
-                const dayEvents = data.events.filter((ev) => sameDay(new Date(ev.start_time), day))
+                const dayEvents = data.events.filter((ev) => sameDayInTz(ev.start_time, day, data.timezone))
                 const allDay = dayEvents.filter((ev) => ev.is_all_day)
                 const positioned = layoutDay(dayEvents)
                 return (
                   <div key={key} className="aspect-square min-h-0 bg-surface p-1.5">
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-content-muted">{day.getDate()}</span>
+                        <span className="text-xs text-content-muted">{day.getUTCDate()}</span>
                       </div>
                       <div className="mt-1 flex-1 overflow-hidden">
                         {allDay.length > 0 && (
@@ -420,9 +461,9 @@ export default function PublicSharePage() {
               {!freeLoading && !freeError && freeSlots.length === 0 && (
                 <p className="px-5 py-8 text-center text-content-muted">No free time in this timeframe.</p>
               )}
-              {!freeLoading && !freeError && groupSlotsByDay(freeSlots).map(([key, slots]) => (
+              {!freeLoading && !freeError && groupSlotsByDay(freeSlots, data.timezone).map(([key, slots]) => (
                 <div key={key} className="px-5 py-3">
-                  <p className="mb-1.5 text-xs font-medium text-content-faint">{dayLabel(slots[0].start)}</p>
+                  <p className="mb-1.5 text-xs font-medium text-content-faint">{dayLabel(slots[0].start, data.timezone)}</p>
                   <div className="flex flex-wrap gap-2">
                     {slots.map((slot, i) => (
                       <span
@@ -441,7 +482,7 @@ export default function PublicSharePage() {
         </AnimatePresence>
       </motion.div>
 
-      {polls.length > 0 && (
+{polls.length > 0 && (
         <div className="mt-6 space-y-4">
           <div className="flex items-center gap-2 px-1">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
@@ -449,86 +490,118 @@ export default function PublicSharePage() {
             </span>
             <h2 className="font-semibold text-content">Polls</h2>
           </div>
-          <AnimatePresence>
-            {polls.map((poll) => {
-              const maxVotes = Math.max(...poll.slots.map((s: PollSlot) => s.votes.length), 0)
-              const totalVotes = poll.slots.reduce((n, s: PollSlot) => n + s.votes.length, 0)
-              return (
-                <motion.div
-                  key={poll.id}
-                  variants={slideRight}
-                  initial="hidden"
-                  animate="visible"
-                  className="card overflow-hidden"
-                >
-                  <div className="flex items-center justify-between gap-2 border-b border-border bg-accent/5 px-5 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
-                        <PollSmall />
-                      </span>
-                      <div>
-                        <p className="font-semibold text-content">{poll.title || 'Untitled poll'}</p>
-                        <p className="text-xs text-content-faint">
-                          {poll.slots.length} slot{poll.slots.length === 1 ? '' : 's'} · {totalVotes} vote{totalVotes === 1 ? '' : 's'}
-                        </p>
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+            <AnimatePresence>
+              {polls.map((poll) => {
+                const maxVotes = Math.max(...poll.slots.map((s: PollSlot) => s.votes.length), 0)
+                const totalVotes = poll.slots.reduce((n, s: PollSlot) => n + s.votes.length, 0)
+                const sortedSlots = [...poll.slots].sort(
+                  (a, b) => b.votes.length - a.votes.length || new Date(a.start).getTime() - new Date(b.start).getTime(),
+                )
+                return (
+                  <motion.div
+                    key={poll.id}
+                    variants={slideRight}
+                    initial="hidden"
+                    animate="visible"
+                    className="card overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-border bg-accent/5 px-5 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent/10 text-accent">
+                          <PollSmall />
+                        </span>
+                        <div>
+                          <p className="font-semibold text-content">{poll.title || 'Untitled poll'}</p>
+                          <p className="text-xs text-content-faint">
+                            {poll.slots.length} slot{poll.slots.length === 1 ? '' : 's'} · {totalVotes} vote{totalVotes === 1 ? '' : 's'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="divide-y divide-border">
-                    {poll.slots.map((slot: PollSlot) => {
-                      const voted = voter ? slot.votes.some((v) => v.email === voter.email) : false
-                      const isWinner = slot.votes.length === maxVotes && maxVotes > 0
-                      return (
-                        <div key={slot.id} className="flex items-center gap-3 px-5 py-3">
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-accent">
-                            <ClockSmall />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-content">
-                              {dayLabel(slot.start)} · {formatRange(slot.start, slot.end)}
-                            </p>
-                            <p className="text-xs text-content-faint">
-                              {slot.votes.length} vote{slot.votes.length === 1 ? '' : 's'}
-                              {isWinner && maxVotes > 0 && totalVotes > 0 ? ' · leading' : ''}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {voter ? (
-                              voted ? (
-                                <button
-                                  onClick={() => handleUnvote(slot.id)}
-                                  disabled={unvoteSlot.isPending}
-                                  className="flex items-center gap-1.5 rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/25 disabled:opacity-50"
-                                >
-                                  <CheckSmall /> Voted
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleVote(slot.id)}
-                                  disabled={voteSlot.isPending}
-                                  className="btn-primary px-3 py-1.5 text-xs"
-                                >
-                                  Vote
-                                </button>
-                              )
-                            ) : (
-                              <button
-                                onClick={() => handleVote(slot.id)}
-                                className="btn-primary px-3 py-1.5 text-xs"
-                              >
-                                Vote
-                              </button>
+                    <div className="divide-y divide-border">
+                      {sortedSlots.map((slot: PollSlot) => {
+                        const voted = voter ? slot.votes.some((v) => v.email === voter.email) : false
+                        const isWinner = slot.votes.length === maxVotes && maxVotes > 0
+                        const expanded = expandedSlot === slot.id
+                        return (
+                          <div key={slot.id} className="flex flex-col">
+                            <div
+                              className="flex cursor-pointer items-center gap-3 px-5 py-3"
+                              onClick={() => setExpandedSlot((prev) => (prev === slot.id ? null : slot.id))}
+                            >
+                              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-accent">
+                                <ClockSmall />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-content">
+                                  {dayLabel(slot.start, data.timezone)} · {formatRange(slot.start, slot.end)}
+                                </p>
+                                <p className="text-xs text-content-faint">
+                                  {slot.votes.length} vote{slot.votes.length === 1 ? '' : 's'}
+                                  {isWinner && maxVotes > 0 && totalVotes > 0 ? ' · leading' : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {voter ? (
+                                  voted ? (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleUnvote(slot.id) }}
+                                      disabled={unvoteSlot.isPending}
+                                      className="flex items-center gap-1.5 rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/25 disabled:opacity-50"
+                                    >
+                                      <CheckSmall /> Voted
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleVote(slot.id) }}
+                                      disabled={voteSlot.isPending}
+                                      className="btn-primary px-3 py-1.5 text-xs"
+                                    >
+                                      Vote
+                                    </button>
+                                  )
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setShowVoter(true) }}
+                                    className="btn-primary px-3 py-1.5 text-xs"
+                                  >
+                                    Vote
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {expanded && (
+                              <div className="border-t border-border bg-surface-alt/40 px-8 py-2.5">
+                                {slot.votes.length === 0 ? (
+                                  <p className="text-xs text-content-faint">No votes yet.</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {slot.votes.map((v) => (
+                                      <span
+                                        key={v.id}
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs text-content"
+                                      >
+                                        <span className="grid h-4 w-4 place-items-center rounded-full bg-accent/20 text-[10px] font-bold text-accent">
+                                          {(v.display_name || v.email).slice(0, 1).toUpperCase()}
+                                        </span>
+                                        {v.display_name || v.email}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+          </div>
         </div>
       )}
 

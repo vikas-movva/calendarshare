@@ -5,11 +5,12 @@ use crate::calendar::models::CalendarEvent;
 use crate::calendar::provider::CalendarProvider;
 use crate::shares::models::{NewShare, NewShareEvent, PublicEvent};
 
-/// Default working window, in minutes-of-day (local time), used when
-/// computing free slots. Slots are 30 minutes and only fall inside this
-/// window on each calendar day.
-const WORK_START_MIN: i64 = 9 * 60;
-const WORK_END_MIN: i64 = 17 * 60;
+/// Working window, in minutes-of-day (share-local time), used when computing
+/// free slots. Free slots are 30-minute granularity and only fall inside this
+/// window on each calendar day. The window spans the full day so the computed
+/// free times are not artificially truncated to business hours.
+const WORK_START_MIN: i64 = 0;
+const WORK_END_MIN: i64 = 24 * 60;
 const SLOT_MINUTES: i64 = 30;
 
 /// Compute the free time slots inside a share's range, given the share's
@@ -57,44 +58,56 @@ pub fn compute_free_slots(
     }
 
     // Walk each calendar day in the range.
-    let mut cursor = range_start.with_timezone(&tz).date_naive();
-    let last = range_end.with_timezone(&tz).date_naive();
-    while cursor <= last {
-        let work_start_min =
-            cursor.and_hms_opt(0, 0, 0).unwrap() + chrono::Duration::minutes(WORK_START_MIN);
-        let _work_end_min =
-            cursor.and_hms_opt(0, 0, 0).unwrap() + chrono::Duration::minutes(WORK_END_MIN);
+    let range_start_local = range_start.with_timezone(&tz);
+    let range_end_local = range_end.with_timezone(&tz);
+    let range_start_day = range_start_local.date_naive();
+    let range_end_day = range_end_local.date_naive();
+    let range_start_min = range_start_local.time().hour() as i64 * 60 + range_start_local.time().minute() as i64;
+    let range_end_min = range_end_local.time().hour() as i64 * 60 + range_end_local.time().minute() as i64;
+
+    let mut cursor = range_start_day;
+    while cursor <= range_end_day {
+        let day_start = cursor.and_hms_opt(0, 0, 0).unwrap();
+        let t0 = if cursor == range_start_day {
+            WORK_START_MIN.max(range_start_min)
+        } else {
+            WORK_START_MIN
+        };
+        let t1 = if cursor == range_end_day {
+            WORK_END_MIN.min(range_end_min)
+        } else {
+            WORK_END_MIN
+        };
 
         // Busy intervals for this day, clamped to the working window.
         let day_busy: Vec<(i64, i64)> = merged
             .iter()
             .map(|(s, e)| {
-                let cs = (*s).max(WORK_START_MIN);
-                let ce = (*e).min(WORK_END_MIN);
+                let cs = (*s).max(t0);
+                let ce = (*e).min(t1);
                 (cs, ce)
             })
             .filter(|(s, e)| e > s)
             .collect();
 
         // Walk the working window and emit free gaps.
-        let mut t = WORK_START_MIN;
-        let end = WORK_END_MIN;
-        while t < end {
+        let mut t = t0;
+        while t < t1 {
             let blocked = day_busy.iter().any(|(s, e)| t >= *s && t < *e);
             if blocked {
                 t += SLOT_MINUTES;
                 continue;
             }
             // Find the end of this free gap (next busy start, or work end).
-            let mut gap_end = end;
+            let mut gap_end = t1;
             for (s, e) in &day_busy {
                 if *s > t && *s < gap_end {
                     gap_end = *s;
                 }
                 let _ = e;
             }
-            let slot_start = work_start_min + chrono::Duration::minutes(t - WORK_START_MIN);
-            let slot_end = work_start_min + chrono::Duration::minutes(gap_end - WORK_START_MIN);
+            let slot_start = day_start + chrono::Duration::minutes(t - WORK_START_MIN);
+            let slot_end = day_start + chrono::Duration::minutes(gap_end - WORK_START_MIN);
             if slot_end > slot_start {
                 slots.push(crate::shares::models::FreeSlot {
                     start: slot_start.and_utc().with_timezone(&chrono::Utc),

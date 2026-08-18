@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { useListPolls, useCreatePoll, useVoteSlot, useUnvoteSlot } from '../hooks/queries'
+import { useListPolls, useCreatePoll, useVoteSlot, useUnvoteSlot, useMe } from '../hooks/queries'
 import { PollSmall, ArrowLeftSmall, CheckSmall, UsersSmall, ClockSmall, PlusSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
 import { stagger, slideRight } from '../theme/anim'
@@ -18,6 +18,7 @@ function fmtDate(iso: string): string {
 export default function PollsPage() {
   const { shareId = '' } = useParams()
   const { data, isLoading, error } = useListPolls(shareId)
+  const { data: me } = useMe()
   const createPoll = useCreatePoll()
   const voteSlot = useVoteSlot()
   const unvoteSlot = useUnvoteSlot()
@@ -29,6 +30,28 @@ export default function PollsPage() {
   const [showVoter, setShowVoter] = useState(false)
   const [voterEmail, setVoterEmail] = useState('')
   const [voterName, setVoterName] = useState('')
+  const [expandedSlot, setExpandedSlot] = useState<string | null>(null)
+
+  useEffect(() => {
+    // A logged-in user is auto-identified from /api/me, so the sign-in
+    // modal never appears for them and their email/name are pre-filled.
+    if (me?.email) {
+      const v = { email: me.email, displayName: me.display_name || '' }
+      setVoter(v)
+      try {
+        localStorage.setItem(VOTER_KEY, JSON.stringify(v))
+      } catch {
+        // ignore
+      }
+      return
+    }
+    try {
+      const raw = localStorage.getItem(VOTER_KEY)
+      if (raw) setVoter(JSON.parse(raw))
+    } catch {
+      // ignore
+    }
+  }, [me?.email, me?.display_name])
 
   useEffect(() => {
     try {
@@ -169,11 +192,16 @@ export default function PollsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        // Scrollable so long date ranges extend down the page instead of
+        // pushing past the viewport.
+        <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
           <AnimatePresence>
             {polls.map((poll) => {
               const maxVotes = Math.max(...poll.slots.map((s) => s.votes.length), 0)
               const totalVotes = poll.slots.reduce((n, s) => n + s.votes.length, 0)
+              const sortedSlots = [...poll.slots].sort(
+                (a, b) => b.votes.length - a.votes.length || new Date(a.start).getTime() - new Date(b.start).getTime(),
+              )
               return (
                 <motion.div
                   key={poll.id}
@@ -196,51 +224,78 @@ export default function PollsPage() {
                   </div>
 
                   <div className="divide-y divide-border">
-                    {poll.slots.map((slot) => {
+                    {sortedSlots.map((slot) => {
                       const voted = voter ? slot.votes.some((v) => v.email === voter.email) : false
                       const isWinner = slot.votes.length === maxVotes && maxVotes > 0
+                      const expanded = expandedSlot === slot.id
                       return (
-                        <div key={slot.id} className="flex items-center gap-3 px-5 py-3">
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-accent">
-                            <ClockSmall />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-content">
-                              {fmtDate(slot.start)} · {fmtTime(slot.start)} – {fmtTime(slot.end)}
-                            </p>
-                            <p className="text-xs text-content-faint">
-                              {slot.votes.length} vote{slot.votes.length === 1 ? '' : 's'}
-                              {isWinner && maxVotes > 0 && totalVotes > 0 ? ' · leading' : ''}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {voter ? (
-                              voted ? (
-                                <button
-                                  onClick={() => handleUnvote(slot.id)}
-                                  disabled={unvoteSlot.isPending}
-                                  className="flex items-center gap-1.5 rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/25 disabled:opacity-50"
-                                >
-                                  <CheckSmall /> Voted
-                                </button>
+                        <div key={slot.id} className="flex flex-col">
+                          <div
+                            className="flex cursor-pointer items-center gap-3 px-5 py-3"
+                            onClick={() => setExpandedSlot((prev) => (prev === slot.id ? null : slot.id))}
+                          >
+                            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-accent">
+                              <ClockSmall />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-content">
+                                {fmtDate(slot.start)} · {fmtTime(slot.start)} – {fmtTime(slot.end)}
+                              </p>
+                              <p className="text-xs text-content-faint">
+                                {slot.votes.length} vote{slot.votes.length === 1 ? '' : 's'}
+                                {isWinner && maxVotes > 0 && totalVotes > 0 ? ' · leading' : ''}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {voter ? (
+                                voted ? (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleUnvote(slot.id) }}
+                                    disabled={unvoteSlot.isPending}
+                                    className="flex items-center gap-1.5 rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/25 disabled:opacity-50"
+                                  >
+                                    <CheckSmall /> Voted
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleVote(slot.id) }}
+                                    disabled={voteSlot.isPending}
+                                    className="btn-primary px-3 py-1.5 text-xs"
+                                  >
+                                    Vote
+                                  </button>
+                                )
                               ) : (
                                 <button
-                                  onClick={() => handleVote(slot.id)}
-                                  disabled={voteSlot.isPending}
+                                  onClick={(e) => { e.stopPropagation(); setShowVoter(true) }}
                                   className="btn-primary px-3 py-1.5 text-xs"
                                 >
                                   Vote
                                 </button>
-                              )
-                            ) : (
-                              <button
-                                onClick={() => setShowVoter(true)}
-                                className="btn-primary px-3 py-1.5 text-xs"
-                              >
-                                Vote
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
+                          {expanded && (
+                            <div className="border-t border-border bg-surface-alt/40 px-8 py-2.5">
+                              {slot.votes.length === 0 ? (
+                                <p className="text-xs text-content-faint">No votes yet.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {slot.votes.map((v) => (
+                                    <span
+                                      key={v.id}
+                                      className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-1 text-xs text-content"
+                                    >
+                                      <span className="grid h-4 w-4 place-items-center rounded-full bg-accent/20 text-[10px] font-bold text-accent">
+                                        {(v.display_name || v.email).slice(0, 1).toUpperCase()}
+                                      </span>
+                                      {v.display_name || v.email}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
