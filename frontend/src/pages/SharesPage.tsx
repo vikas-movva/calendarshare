@@ -39,9 +39,12 @@ function CopyButton({ s, onCopied }: { s: { token?: string }; onCopied: () => vo
 
   return (
     <div className="flex items-center gap-1.5">
-      <button
+      <motion.button
         onClick={handleCopy}
         title="Copy link"
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.8 }}
+        transition={{ duration: 0.15 }}
         className="relative grid h-8 w-8 place-items-center rounded-lg border border-border text-content-muted hover:bg-card"
       >
         <AnimatePresence initial={false}>
@@ -69,7 +72,7 @@ function CopyButton({ s, onCopied }: { s: { token?: string }; onCopied: () => vo
             </motion.span>
           )}
         </AnimatePresence>
-      </button>
+      </motion.button>
       <AnimatePresence>
         {copied && (
           <motion.span

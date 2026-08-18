@@ -121,8 +121,8 @@ export default function AppLayout() {
                 Sign in
               </button>
             )}
-            <div className="ml-2 hidden sm:flex">
-              <ThemeControls />
+            <div className="ml-2 flex sm:ml-3">
+              <ThemeControls variant="mobile" />
             </div>
           </nav>
         </div>

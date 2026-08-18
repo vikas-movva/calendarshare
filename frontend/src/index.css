@@ -235,6 +235,17 @@ body {
   .btn-primary:active { transform: translateY(1px); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; box-shadow: none; }
 
+@media (max-width: 640px) {
+  .btn-primary {
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.85rem;
+  }
+  .btn-primary.inline-flex {
+    width: auto;
+  }
+}
+
   .btn-ghost {
     display: inline-flex;
     align-items: center;
