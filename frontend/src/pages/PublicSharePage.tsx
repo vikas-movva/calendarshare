@@ -135,6 +135,54 @@ export default function PublicSharePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <AnimatePresence>
+        {selected && (
+          <motion.div
+            key="backdrop"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelected(null)}
+          >
+            <motion.div
+              className="card w-full max-w-sm overflow-hidden"
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <span className="text-xs text-content-faint">
+                  {formatEventTime(selected.start_time, selected.is_all_day)} –{' '}
+                  {formatEventTime(selected.end_time, selected.is_all_day)}
+                </span>
+                <button
+                  onClick={() => setSelected(null)}
+                  className="grid h-7 w-7 place-items-center rounded-lg text-content-muted hover:bg-card"
+                  aria-label="Close"
+                >
+                  <XSmall />
+                </button>
+              </div>
+              <div className="p-4">
+                <p className="font-semibold text-content">{selected.title || '(busy)'}</p>
+                {selected.location && (
+                  <p className="mt-2 text-sm text-content-muted">📍 {selected.location}</p>
+                )}
+                {selected.description && (
+                  <p className="mt-2 text-sm text-content-muted">{selected.description}</p>
+                )}
+                {!selected.title && !selected.location && !selected.description && (
+                  <p className="mt-2 text-sm text-content-faint">No details shared.</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card overflow-hidden">
         <div className="flex items-center gap-2.5 border-b border-border bg-accent/5 px-5 py-4">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent/10 text-accent">
@@ -168,17 +216,17 @@ export default function PublicSharePage() {
                 <motion.div key={i} variants={slideRight} className="flex gap-3 px-5 py-3.5">
                   <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-content">{ev.title || '(busy)'}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate font-medium text-content">{ev.title || '(busy)'}</p>
                       <span className="shrink-0 text-xs text-content-faint">
                         {formatEventTime(ev.start_time, ev.is_all_day)} – {formatEventTime(ev.end_time, ev.is_all_day)}
                       </span>
                     </div>
                     {ev.location && (
-                      <p className="mt-1 text-sm text-content-muted">📍 {ev.location}</p>
+                      <p className="truncate text-sm text-content-muted">📍 {ev.location}</p>
                     )}
                     {ev.description && (
-                      <p className="mt-1 text-sm text-content-muted">{ev.description}</p>
+                      <p className="truncate text-sm text-content-muted">{ev.description}</p>
                     )}
                   </div>
                 </motion.div>
@@ -240,7 +288,7 @@ export default function PublicSharePage() {
                                   key={i}
                                   type="button"
                                   onClick={() => setSelected(p.ev)}
-                                  className="absolute flex flex-col justify-center overflow-visible rounded-md bg-accent/10 px-1.5 py-1.5 text-[11px] leading-snug text-accent hover:bg-accent/25"
+                                  className="absolute flex items-center gap-1 overflow-hidden rounded-md bg-accent/10 px-1.5 py-1.5 text-[11px] leading-snug text-accent hover:bg-accent/25"
                                   style={{
                                     top: `${p.top * 100}%`,
                                     height: `${p.height * 100}%`,
@@ -272,54 +320,6 @@ export default function PublicSharePage() {
                 )
               })}
             </div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {selected && (
-            <motion.div
-              key="backdrop"
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelected(null)}
-            >
-              <motion.div
-                className="card w-full max-w-sm overflow-hidden"
-                initial={{ opacity: 0, scale: 0.96, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 16 }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                  <span className="text-xs text-content-faint">
-                    {formatEventTime(selected.start_time, selected.is_all_day)} –{' '}
-                    {formatEventTime(selected.end_time, selected.is_all_day)}
-                  </span>
-                  <button
-                    onClick={() => setSelected(null)}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-content-muted hover:bg-card"
-                    aria-label="Close"
-                  >
-                    <XSmall />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <p className="font-semibold text-content">{selected.title || '(busy)'}</p>
-                  {selected.location && (
-                    <p className="mt-2 text-sm text-content-muted">📍 {selected.location}</p>
-                  )}
-                  {selected.description && (
-                    <p className="mt-2 text-sm text-content-muted">{selected.description}</p>
-                  )}
-                  {!selected.title && !selected.location && !selected.description && (
-                    <p className="mt-2 text-sm text-content-faint">No details shared.</p>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
