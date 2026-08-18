@@ -22,12 +22,32 @@ function lifespanMs(s: { created_at: string; expires_at: string | null }): numbe
   return new Date(s.expires_at).getTime() - new Date(s.created_at).getTime()
 }
 
-function CopyButton({ s, onCopied, onError }: { s: { token?: string | null }; onCopied: () => void; onError: () => void }) {
+function CopyButton({
+  s,
+  status,
+  onCopied,
+  onError,
+}: {
+  s: { token?: string | null }
+  status: 'active' | 'expired' | 'revoked'
+  onCopied: () => void
+  onError: () => void
+}) {
   const [copied, setCopied] = useState(false)
   const [failed, setFailed] = useState(false)
 
+  const disabled = status !== 'active'
+  const unavailable = !s.token || disabled
+  const tooltip = unavailable
+    ? status === 'revoked'
+      ? 'Link revoked'
+      : status === 'expired'
+      ? 'Link expired'
+      : 'Link unavailable'
+    : 'Copy link'
+
   async function handleCopy() {
-    if (!s.token) {
+    if (!s.token || disabled) {
       setFailed(true)
       onError()
       window.setTimeout(() => setFailed(false), 1800)
@@ -47,15 +67,15 @@ function CopyButton({ s, onCopied, onError }: { s: { token?: string | null }; on
 
   return (
     <div className="flex items-center gap-1.5">
-      <motion.button
+<motion.button
         onClick={handleCopy}
-        title={s.token ? 'Copy link' : 'Link unavailable'}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.8 }}
+        title={tooltip}
+        whileHover={{ scale: disabled ? 1 : 1.08 }}
+        whileTap={{ scale: disabled ? 1 : 0.8 }}
         transition={{ duration: 0.15 }}
         className={`relative grid h-8 w-8 place-items-center rounded-lg border border-border text-content-muted hover:bg-card ${
-          failed ? 'border-red-500/40 text-red-400' : ''
-        }`}
+          unavailable ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : ''
+        } ${failed ? 'border-red-500/40 text-red-400' : ''}`}
       >
         <AnimatePresence initial={false}>
           {copied ? (
@@ -79,7 +99,7 @@ function CopyButton({ s, onCopied, onError }: { s: { token?: string | null }; on
               transition={{ duration: 0.2 }}
               title="Copy unavailable"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -109,17 +129,6 @@ function CopyButton({ s, onCopied, onError }: { s: { token?: string | null }; on
             className="text-xs font-medium text-green-400"
           >
             Copied!
-          </motion.span>
-        )}
-        {failed && (
-          <motion.span
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -6 }}
-            transition={{ duration: 0.2 }}
-            className="text-xs font-medium text-red-400"
-          >
-            {s.token ? 'Copy failed' : 'Link unavailable'}
           </motion.span>
         )}
       </AnimatePresence>
@@ -183,18 +192,22 @@ export default function SharesPage() {
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.25 }}
-            className={`mb-4 flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm ${
-              toast.kind === 'err'
-                ? 'border border-red-500/30 bg-red-500/10 text-red-400'
-                : 'border border-green-500/30 bg-green-500/10 text-green-400'
-            }`}
+            className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 pb-6"
           >
-            {toast.kind === 'ok' ? <CheckSmall /> : null}
-            {toast.text}
+            <div
+              className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg shadow-black/40 ${
+                toast.kind === 'err'
+                  ? 'border border-red-500/40 bg-red-500/15 text-red-300'
+                  : 'border border-green-500/40 bg-green-500/15 text-green-300'
+              }`}
+            >
+              {toast.kind === 'ok' ? <CheckSmall /> : null}
+              {toast.text}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -246,7 +259,7 @@ export default function SharesPage() {
                         </span>
                       )
                     )}
-                    <CopyButton s={s} onCopied={() => showToast('Link copied!')} onError={() => showToast('Link unavailable — redeploy the backend', 'err')} />
+                    <CopyButton s={s} status={status} onCopied={() => showToast('Link copied!')} onError={() => showToast(status === 'revoked' ? 'Link has been revoked' : status === 'expired' ? 'Link has expired' : 'Could not copy link', 'err')} />
                     <button
                       onClick={() => handleRevoke(s)}
                       disabled={revoke.isPending}

@@ -213,7 +213,7 @@ export default function PublicSharePage() {
                                 key={i}
                                 type="button"
                                 onClick={() => setSelected(ev)}
-                                className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25"
+                                className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25 min-h-[16px]"
                                 title="All day"
                               >
                                 All day{ev.title ? ` · ${ev.title}` : ''}
@@ -231,7 +231,7 @@ export default function PublicSharePage() {
                           </div>
                         )}
                         {positioned.length > 0 && (
-                          <div className="relative flex-1">
+                          <div className="relative flex-1 overflow-visible">
                             {positioned.map((p, i) => {
                               const widthPct = 100 / p.totalLanes
                               const leftPct = p.lane * widthPct
@@ -240,17 +240,18 @@ export default function PublicSharePage() {
                                   key={i}
                                   type="button"
                                   onClick={() => setSelected(p.ev)}
-                                  className="absolute overflow-hidden truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] leading-tight text-accent hover:bg-accent/25"
+                                  className="absolute flex flex-col justify-center overflow-visible rounded-md bg-accent/10 px-1.5 py-1.5 text-[11px] leading-snug text-accent hover:bg-accent/25"
                                   style={{
                                     top: `${p.top * 100}%`,
                                     height: `${p.height * 100}%`,
+                                    minHeight: '32px',
                                     left: `${leftPct}%`,
                                     width: `calc(${widthPct}% - 4px)`,
                                   }}
                                   title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}`}
                                 >
-                                  {formatTime(p.ev.start_time)}
-                                  {p.ev.title ? ` · ${p.ev.title}` : ''}
+                                  <span className="truncate">{formatTime(p.ev.start_time)}</span>
+                                  {p.ev.title && <span className="truncate">{p.ev.title}</span>}
                                 </button>
                               )
                             })}
