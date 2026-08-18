@@ -101,7 +101,7 @@ pub async fn create_share_handler(
     let service = ShareService {
         pool: state.pool.clone(),
         token_service: RealTokenService,
-        public_base_url: state.config.public_base_url.clone(),
+        public_base_url: state.config.public_base_url_or("http://localhost:3000"),
     };
 
     let result = service.create_share(user.user_id, req.calendar_id, events, crate::shares::service::CreateShareRequest {
@@ -158,7 +158,7 @@ pub async fn public_share(
     let service = ShareService {
         pool: state.pool.clone(),
         token_service: RealTokenService,
-        public_base_url: state.config.public_base_url.clone(),
+        public_base_url: state.config.public_base_url_or("http://localhost:3000"),
     };
 
     let (share, events) = service.public_share_events(&token).await
@@ -187,9 +187,9 @@ fn make_provider(
     user_id: Uuid,
 ) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient> {
     let oauth = crate::calendar::models::RealGoogleOAuthClient::new(
-        state.config.google_client_id.clone(),
-        state.config.google_client_secret.clone(),
-        state.config.google_redirect_uri.clone(),
+        state.config.google_client_id_or(""),
+        state.config.google_client_secret_or(""),
+        state.config.google_redirect_uri_or(""),
     );
     crate::calendar::google::GoogleCalendarProvider::new(oauth, state.pool.clone(), user_id)
 }
@@ -211,7 +211,7 @@ async fn authenticate(state: &AuthState, headers: &HeaderMap) -> Result<Authenti
     let user_id: Uuid = parts[0].parse().map_err(|_| AppError::AuthError("invalid session".into()))?;
     let signature = parts[1];
 
-    if !crate::auth::session::verify_session(&state.config.session_secret, &user_id, signature) {
+    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature) {
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 

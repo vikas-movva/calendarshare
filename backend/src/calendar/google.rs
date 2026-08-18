@@ -50,7 +50,7 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
                     .ok_or(CalendarProviderError::TokenExpired)?;
                 let decrypted = encryption::decrypt(
                     &refresh_token,
-                    &crate::config::Config::from_env()?.token_encryption_key,
+                    crate::config::Config::from_env()?.token_encryption_key_or(),
                 )?;
                 let token = self
                     .oauth
@@ -61,12 +61,12 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
                 let expires_at = now + chrono::Duration::seconds(token.expires_in);
                 let new_access = encryption::encrypt(
                     &token.access_token,
-                    &crate::config::Config::from_env()?.token_encryption_key,
+                    crate::config::Config::from_env()?.token_encryption_key_or(),
                 )?;
                 let new_refresh = match token.refresh_token.as_ref() {
                     Some(r) => Some(encryption::encrypt(
                         r,
-                        &crate::config::Config::from_env()?.token_encryption_key,
+                        crate::config::Config::from_env()?.token_encryption_key_or(),
                     )?),
                     None => None,
                 };
@@ -88,7 +88,7 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
 
         let decrypted = encryption::decrypt(
             &conn.access_token_encrypted,
-            &crate::config::Config::from_env()?.token_encryption_key,
+            crate::config::Config::from_env()?.token_encryption_key_or(),
         )?;
         Ok(decrypted)
     }

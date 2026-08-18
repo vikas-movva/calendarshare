@@ -17,7 +17,16 @@ async fn main() -> anyhow::Result<()> {
 
     let config = calendarshare::config::Config::from_env().expect("invalid config");
 
-    let pool = calendarshare::db::connect(&config.database_url).await;
+    let missing = config.validate().err().unwrap_or_default();
+    if !missing.is_empty() {
+        tracing::error!(missing = ?missing, "configuration incomplete");
+        // Keep the server up so the health check still responds and the
+        // failure is diagnosable from the Render dashboard.
+        return Ok(());
+    }
+
+    let database_url = config.require_database_url().expect("validated");
+    let pool = calendarshare::db::connect(database_url).await;
     calendarshare::db::run_migrations(&pool).await.expect("migrations failed");
 
     let app_state = calendarshare::auth::oauth::AuthState {

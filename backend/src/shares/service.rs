@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use uuid::Uuid;
 
-use crate::shares::models::{NewShare, NewShareEvent, PublicEvent, ShareEvent};
+use crate::shares::models::{NewShare, NewShareEvent, PublicEvent};
 use crate::calendar::models::CalendarEvent;
 
 pub struct CreateShareRequest {

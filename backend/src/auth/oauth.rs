@@ -59,8 +59,8 @@ scope={}&\
 access_type=offline&\
 prompt=consent&\
 state=calendarshare",
-            urlencoding::encode(&self.config.google_client_id),
-            urlencoding::encode(&self.config.google_redirect_uri),
+            urlencoding::encode(&self.config.google_client_id_or("")),
+            urlencoding::encode(&self.config.google_redirect_uri_or("")),
             urlencoding::encode(&scopes.join(" ")),
         )
     }
@@ -70,11 +70,11 @@ state=calendarshare",
         client
             .post("https://oauth2.googleapis.com/token")
             .form(&[
-                ("client_id", self.config.google_client_id.as_str()),
-                ("client_secret", self.config.google_client_secret.as_str()),
+                ("client_id", self.config.google_client_id_or("").as_str()),
+                ("client_secret", self.config.google_client_secret_or("").as_str()),
                 ("code", code),
                 ("grant_type", "authorization_code"),
-                ("redirect_uri", self.config.google_redirect_uri.as_str()),
+                ("redirect_uri", self.config.google_redirect_uri_or("").as_str()),
             ])
             .send()
             .await?
@@ -105,10 +105,10 @@ impl OauthClient for GoogleOauthClient {
             .await
             .map_err(|e| AppError::CalendarProviderUnavailable(e.to_string()))?;
 
-        let access_encrypted = crate::encryption::encrypt(&token.access_token, &self.config.token_encryption_key)
+        let access_encrypted = crate::encryption::encrypt(&token.access_token, self.config.token_encryption_key_or())
             .map_err(|e| AppError::InternalError(e))?;
         let refresh_encrypted = token.refresh_token.as_ref()
-            .map(|r| crate::encryption::encrypt(r, &self.config.token_encryption_key).unwrap_or_else(|_| r.clone()));
+            .map(|r| crate::encryption::encrypt(r, self.config.token_encryption_key_or()).unwrap_or_else(|_| r.clone()));
 
         let expires_at = chrono::Utc::now() + chrono::Duration::seconds(token.expires_in);
 
@@ -132,7 +132,7 @@ impl OauthClient for GoogleOauthClient {
         crate::db::queries::upsert_connection(&self.pool, &connection).await
             .map_err(|e| AppError::InternalError(e.to_string()))?;
 
-        let signature = crate::auth::session::sign_session(&self.config.session_secret, &user.id);
+        let signature = crate::auth::session::sign_session(self.config.session_secret_or(), &user.id);
         Ok(CallbackResult {
             user_id: user.id.to_string(),
             signature,
@@ -171,7 +171,7 @@ pub async fn callback(
     let mut headers = HeaderMap::new();
     headers.insert("set-cookie", set_cookie_header(&cookie_value, 365 * 24 * 3600));
 
-    let redirect = format!("{}/dashboard", state.config.public_base_url.trim_end_matches('/'));
+    let redirect = format!("{}/dashboard", state.config.public_base_url_or("http://localhost:3000").trim_end_matches('/'));
     Ok((headers, Redirect::temporary(&redirect)))
 }
 
@@ -179,7 +179,7 @@ pub async fn logout(State(state): State<AuthState>) -> impl IntoResponse {
     let mut headers = HeaderMap::new();
     headers.insert("set-cookie", set_cookie_header("", 0));
 
-    let redirect = format!("{}/", state.config.public_base_url.trim_end_matches('/'));
+    let redirect = format!("{}/", state.config.public_base_url_or("http://localhost:3000").trim_end_matches('/'));
     (headers, Redirect::temporary(&redirect))
 }
 
@@ -203,7 +203,7 @@ pub async fn me(
     let user_id: uuid::Uuid = parts[0].parse().map_err(|_| AppError::AuthError("invalid session".into()))?;
     let signature = parts[1];
 
-    if !crate::auth::session::verify_session(&state.config.session_secret, &user_id, signature) {
+    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature) {
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 
