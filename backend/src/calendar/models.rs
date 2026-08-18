@@ -194,14 +194,19 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
         &self,
         access_token: &str,
     ) -> Result<GoogleCalendarList, reqwest::Error> {
-        self.http
+        let resp = self
+            .http
             .get("https://www.googleapis.com/calendar/v3/users/me/calendarlist")
             .bearer_auth(access_token)
             .send()
-            .await?
-            .error_for_status()?
-            .json::<GoogleCalendarList>()
-            .await
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let err = resp.error_for_status().unwrap_err();
+            tracing::error!(error = %err, status = %status, "google list_calendars failed");
+            return Err(err);
+        }
+        resp.json::<GoogleCalendarList>().await
     }
 
     async fn list_events(
@@ -215,7 +220,8 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
             "https://www.googleapis.com/calendar/v3/calendars/{}/events",
             urlencoding::encode(calendar_id)
         );
-        self.http
+        let resp = self
+            .http
             .get(&url)
             .bearer_auth(access_token)
             .query(&[
@@ -226,10 +232,14 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
                 ("maxResults", "2500"),
             ])
             .send()
-            .await?
-            .error_for_status()?
-            .json::<GoogleEventsList>()
-            .await
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let err = resp.error_for_status().unwrap_err();
+            tracing::error!(error = %err, status = %status, "google list_events failed");
+            return Err(err);
+        }
+        resp.json::<GoogleEventsList>().await
     }
 }
 
