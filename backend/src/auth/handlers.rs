@@ -30,7 +30,7 @@ pub async fn list_calendars(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = authenticate(&state, &headers).await?;
-    let provider = make_provider(&state, user.user_id);
+    let provider = make_provider(&state, user.user_id).await;
     let calendars = provider.list_calendars().await?;
     Ok(Json(serde_json::json!({
         "calendars": calendars.into_iter().map(|c| serde_json::json!({
@@ -58,7 +58,7 @@ pub async fn list_events(
         .await?
         .ok_or(AppError::CalendarNotFound)?;
 
-    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id);
+    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
     let events = provider
         .list_events(&calendar.provider_calendar_id, params.start, params.end)
         .await?;
@@ -103,7 +103,7 @@ pub async fn create_share_handler(
         .timezone
         .unwrap_or_else(|| calendar.timezone.clone().unwrap_or_else(|| "UTC".into()));
 
-    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id);
+    let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id).await;
     let events = provider
         .list_events(&calendar.provider_calendar_id, req.start_time, req.end_time)
         .await?;
@@ -212,7 +212,7 @@ pub async fn public_share(
     }))
 }
 
-fn make_provider(
+async fn make_provider(
     state: &AuthState,
     user_id: Uuid,
 ) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient>
@@ -222,16 +222,38 @@ fn make_provider(
         state.config.google_client_secret_or(""),
         state.config.google_redirect_uri_or(""),
     );
-    crate::calendar::google::GoogleCalendarProvider::new(oauth, state.pool.clone(), user_id)
+    let provider = crate::calendar::google::GoogleCalendarProvider::new(oauth, state.pool.clone(), user_id);
+
+    // Resolve the user's Google connection so saved calendars are linked to a
+    // real connection_id (not Uuid::nil()). Otherwise the calendars row is
+    // orphaned and the JOIN in list_calendars_for_user never returns them.
+    let connection_id = get_google_connection_id(state.pool.clone(), user_id).await.ok().flatten();
+    match connection_id {
+        Some(id) => provider.with_connection(id),
+        None => provider,
+    }
 }
 
-fn make_provider_with_connection(
+async fn get_google_connection_id(
+    pool: crate::db::PgPool,
+    user_id: Uuid,
+) -> sqlx::Result<Option<uuid::Uuid>> {
+    let row: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM calendar_connections WHERE user_id = $1 AND provider = 'google'",
+    )
+    .bind(user_id)
+    .fetch_optional(&pool)
+    .await?;
+    Ok(row)
+}
+
+async fn make_provider_with_connection(
     state: &AuthState,
     user_id: Uuid,
     connection_id: Uuid,
 ) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient>
 {
-    make_provider(state, user_id).with_connection(connection_id)
+    make_provider(state, user_id).await.with_connection(connection_id)
 }
 
 async fn authenticate(
