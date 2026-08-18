@@ -34,10 +34,18 @@ impl From<crate::config::ConfigError> for CalendarProviderError {
 impl From<CalendarProviderError> for crate::error::AppError {
     fn from(err: CalendarProviderError) -> Self {
         match err {
-            CalendarProviderError::MissingCredentials => crate::error::AppError::CalendarNotConnected,
-            CalendarProviderError::TokenExpired => crate::error::AppError::CalendarProviderUnavailable("token expired".into()),
-            CalendarProviderError::ProviderError(e) => crate::error::AppError::CalendarProviderUnavailable(e),
-            CalendarProviderError::Network(e) => crate::error::AppError::CalendarProviderUnavailable(e),
+            CalendarProviderError::MissingCredentials => {
+                crate::error::AppError::CalendarNotConnected
+            }
+            CalendarProviderError::TokenExpired => {
+                crate::error::AppError::CalendarProviderUnavailable("token expired".into())
+            }
+            CalendarProviderError::ProviderError(e) => {
+                crate::error::AppError::CalendarProviderUnavailable(e)
+            }
+            CalendarProviderError::Network(e) => {
+                crate::error::AppError::CalendarProviderUnavailable(e)
+            }
             CalendarProviderError::Database(e) => crate::error::AppError::InternalError(e),
             CalendarProviderError::Config(e) => crate::error::AppError::Config(e),
         }

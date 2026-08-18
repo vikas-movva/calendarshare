@@ -1,15 +1,21 @@
-use calendarshare::calendar::models::{CalendarEvent, RealGoogleOAuthClient};
-use calendarshare::shares::models::{project_event_for_visibility, validate_share_range, Visibility};
-use calendarshare::shares::service::{RealTokenService, TokenService};
-use calendarshare::encryption;
 use calendarshare::auth::session;
+use calendarshare::calendar::models::{CalendarEvent, RealGoogleOAuthClient};
+use calendarshare::encryption;
+use calendarshare::shares::models::{
+    project_event_for_visibility, validate_share_range, Visibility,
+};
+use calendarshare::shares::service::{RealTokenService, TokenService};
 
 fn event(title: &str, start: &str, end: &str) -> CalendarEvent {
     CalendarEvent {
         provider_event_id: None,
         title: Some(title.to_string()),
-        start: chrono::DateTime::parse_from_rfc3339(start).unwrap().with_timezone(&chrono::Utc),
-        end: chrono::DateTime::parse_from_rfc3339(end).unwrap().with_timezone(&chrono::Utc),
+        start: chrono::DateTime::parse_from_rfc3339(start)
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        end: chrono::DateTime::parse_from_rfc3339(end)
+            .unwrap()
+            .with_timezone(&chrono::Utc),
         timezone: Some("America/Toronto".into()),
         location: Some("Cafe".into()),
         description: Some("Notes".into()),
@@ -47,38 +53,58 @@ fn details_visibility_exposes_all_fields() {
 #[test]
 fn validate_range_rejects_inverted_range() {
     assert!(validate_share_range(
-        chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z").unwrap().with_timezone(&chrono::Utc),
-        chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z").unwrap().with_timezone(&chrono::Utc),
-    ).is_err());
+        chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    )
+    .is_err());
 }
 
 #[test]
 fn validate_range_rejects_equal_range() {
-    let t = chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z").unwrap().with_timezone(&chrono::Utc);
+    let t = chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     assert!(validate_share_range(t, t).is_err());
 }
 
 #[test]
 fn validate_range_accepts_valid_range() {
     assert!(validate_share_range(
-        chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z").unwrap().with_timezone(&chrono::Utc),
-        chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z").unwrap().with_timezone(&chrono::Utc),
-    ).is_ok());
+        chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+    )
+    .is_ok());
 }
 
 #[test]
 fn event_intersects_share_range() {
     let e = event("X", "2026-08-21T08:00:00Z", "2026-08-21T11:00:00Z");
-    let start = chrono::DateTime::parse_from_rfc3339("2026-08-21T10:00:00Z").unwrap().with_timezone(&chrono::Utc);
-    let end = chrono::DateTime::parse_from_rfc3339("2026-08-21T15:00:00Z").unwrap().with_timezone(&chrono::Utc);
+    let start = chrono::DateTime::parse_from_rfc3339("2026-08-21T10:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let end = chrono::DateTime::parse_from_rfc3339("2026-08-21T15:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     assert!(e.intersects(start, end));
 }
 
 #[test]
 fn event_outside_range_does_not_intersect() {
     let e = event("X", "2026-08-20T08:00:00Z", "2026-08-20T09:00:00Z");
-    let start = chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z").unwrap().with_timezone(&chrono::Utc);
-    let end = chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z").unwrap().with_timezone(&chrono::Utc);
+    let start = chrono::DateTime::parse_from_rfc3339("2026-08-21T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let end = chrono::DateTime::parse_from_rfc3339("2026-08-24T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     assert!(!e.intersects(start, end));
 }
 

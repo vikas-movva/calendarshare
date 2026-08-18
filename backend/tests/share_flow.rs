@@ -1,6 +1,6 @@
 use calendarshare::shares::service::{RealTokenService, TokenService};
-use uuid::Uuid;
 use chrono::Duration;
+use uuid::Uuid;
 
 async fn setup_pool() -> sqlx::PgPool {
     let _ = dotenvy::dotenv();
@@ -17,14 +17,12 @@ async fn public_share_flow_roundtrip() {
     let calendar_id = Uuid::new_v4();
     let share_id = Uuid::new_v4();
 
-    sqlx::query(
-        "INSERT INTO users (id, email) VALUES ($1, $2)",
-    )
-    .bind(user_id)
-    .bind(format!("owner-{}@example.com", user_id))
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+        .bind(user_id)
+        .bind(format!("owner-{}@example.com", user_id))
+        .execute(&pool)
+        .await
+        .unwrap();
 
     sqlx::query(
         "INSERT INTO calendar_connections (id, user_id, provider, access_token_encrypted) VALUES ($1, $2, 'google', 'encrypted')",

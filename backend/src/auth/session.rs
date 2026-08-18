@@ -1,6 +1,6 @@
+use base64::Engine;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use base64::Engine;
 
 type HmacSha256 = Hmac<Sha256>;
 

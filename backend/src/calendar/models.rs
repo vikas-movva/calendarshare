@@ -104,9 +104,15 @@ pub struct GoogleEventDateTime {
 #[async_trait]
 pub trait GoogleOAuthClient: Send + Sync {
     async fn exchange_code(&self, code: &str) -> Result<GoogleTokenResponse, reqwest::Error>;
-    async fn refresh_token(&self, refresh_token: &str) -> Result<GoogleTokenResponse, reqwest::Error>;
+    async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<GoogleTokenResponse, reqwest::Error>;
     async fn get_user_info(&self, access_token: &str) -> Result<GoogleUserInfo, reqwest::Error>;
-    async fn list_calendars(&self, access_token: &str) -> Result<GoogleCalendarList, reqwest::Error>;
+    async fn list_calendars(
+        &self,
+        access_token: &str,
+    ) -> Result<GoogleCalendarList, reqwest::Error>;
     async fn list_events(
         &self,
         access_token: &str,
@@ -154,7 +160,10 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
             .await
     }
 
-    async fn refresh_token(&self, refresh_token: &str) -> Result<GoogleTokenResponse, reqwest::Error> {
+    async fn refresh_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<GoogleTokenResponse, reqwest::Error> {
         self.http
             .post("https://oauth2.googleapis.com/token")
             .form(&[
@@ -181,7 +190,10 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
             .await
     }
 
-    async fn list_calendars(&self, access_token: &str) -> Result<GoogleCalendarList, reqwest::Error> {
+    async fn list_calendars(
+        &self,
+        access_token: &str,
+    ) -> Result<GoogleCalendarList, reqwest::Error> {
         self.http
             .get("https://www.googleapis.com/calendar/v3/users/me/calendarlist")
             .bearer_auth(access_token)

@@ -44,7 +44,9 @@ impl IntoResponse for AppError {
             AppError::AuthError(_) => (StatusCode::UNAUTHORIZED, "auth_error"),
             AppError::CalendarNotConnected => (StatusCode::NOT_FOUND, "calendar_not_connected"),
             AppError::CalendarNotFound => (StatusCode::NOT_FOUND, "calendar_not_found"),
-            AppError::CalendarProviderUnavailable(_) => (StatusCode::BAD_GATEWAY, "provider_unavailable"),
+            AppError::CalendarProviderUnavailable(_) => {
+                (StatusCode::BAD_GATEWAY, "provider_unavailable")
+            }
             AppError::InvalidDateRange(_) => (StatusCode::BAD_REQUEST, "invalid_date_range"),
             AppError::InvalidVisibility(_) => (StatusCode::BAD_REQUEST, "invalid_visibility"),
             AppError::ShareNotFound => (StatusCode::NOT_FOUND, "share_not_found"),

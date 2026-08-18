@@ -1,8 +1,8 @@
 use chrono::DateTime;
 use uuid::Uuid;
 
-use crate::shares::models::{NewShare, NewShareEvent, PublicEvent};
 use crate::calendar::models::CalendarEvent;
+use crate::shares::models::{NewShare, NewShareEvent, PublicEvent};
 
 pub struct CreateShareRequest {
     pub calendar_id: Uuid,
@@ -126,7 +126,10 @@ impl<S: TokenService> ShareService<S> {
                     description: e.description.clone(),
                     is_all_day: e.is_all_day,
                 };
-                crate::shares::models::project_event_for_visibility(&source, share.visibility_enum())
+                crate::shares::models::project_event_for_visibility(
+                    &source,
+                    share.visibility_enum(),
+                )
             })
             .collect();
 

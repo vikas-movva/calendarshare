@@ -12,13 +12,16 @@ pub struct AuthenticatedUser {
 }
 
 pub fn extract_session_id(headers: &HeaderMap) -> Option<&str> {
-    headers.get("cookie").and_then(|v| v.to_str().ok()).and_then(|cookie| {
-        cookie
-            .split(';')
-            .map(|s| s.trim())
-            .find(|s| s.starts_with("sid="))
-            .map(|s| &s[4..])
-    })
+    headers
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|cookie| {
+            cookie
+                .split(';')
+                .map(|s| s.trim())
+                .find(|s| s.starts_with("sid="))
+                .map(|s| &s[4..])
+        })
 }
 
 pub type AuthResult<T> = Result<T, crate::error::AppError>;

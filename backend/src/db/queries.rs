@@ -5,17 +5,21 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateE
     sqlx::migrate!("./migrations").run(pool).await
 }
 
-pub async fn get_user_by_email(pool: &PgPool, email: &str) -> sqlx::Result<Option<crate::users::User>> {
-    let row = sqlx::query_as::<_, crate::users::User>(
-        "SELECT * FROM users WHERE email = $1",
-    )
-    .bind(email)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_user_by_email(
+    pool: &PgPool,
+    email: &str,
+) -> sqlx::Result<Option<crate::users::User>> {
+    let row = sqlx::query_as::<_, crate::users::User>("SELECT * FROM users WHERE email = $1")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
     Ok(row)
 }
 
-pub async fn create_user(pool: &PgPool, user: &crate::users::NewUser) -> sqlx::Result<crate::users::User> {
+pub async fn create_user(
+    pool: &PgPool,
+    user: &crate::users::NewUser,
+) -> sqlx::Result<crate::users::User> {
     let row = sqlx::query_as::<_, crate::users::User>(
         "INSERT INTO users (id, email, display_name, avatar_url) VALUES ($1, $2, $3, $4) RETURNING *",
     )

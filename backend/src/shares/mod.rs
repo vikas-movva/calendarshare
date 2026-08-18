@@ -29,17 +29,28 @@ impl ShareQueryService {
         Ok(shares)
     }
 
-    pub async fn get_share(&self, share_id: Uuid, user_id: Uuid) -> crate::error::AppErrorResult<Option<Share>> {
+    pub async fn get_share(
+        &self,
+        share_id: Uuid,
+        user_id: Uuid,
+    ) -> crate::error::AppErrorResult<Option<Share>> {
         let share = crate::db::queries::get_share_for_user(&self.pool, share_id, user_id).await?;
         Ok(share)
     }
 
-    pub async fn revoke_share(&self, share_id: Uuid, user_id: Uuid) -> crate::error::AppErrorResult<Option<Share>> {
+    pub async fn revoke_share(
+        &self,
+        share_id: Uuid,
+        user_id: Uuid,
+    ) -> crate::error::AppErrorResult<Option<Share>> {
         let share = crate::db::queries::revoke_share(&self.pool, share_id, user_id).await?;
         Ok(share)
     }
 
-    pub async fn list_events(&self, share_id: Uuid) -> crate::error::AppErrorResult<Vec<ShareEvent>> {
+    pub async fn list_events(
+        &self,
+        share_id: Uuid,
+    ) -> crate::error::AppErrorResult<Vec<ShareEvent>> {
         let events = crate::db::queries::list_share_events(&self.pool, share_id).await?;
         Ok(events)
     }

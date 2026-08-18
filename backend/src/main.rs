@@ -27,7 +27,9 @@ async fn main() -> anyhow::Result<()> {
 
     let database_url = config.require_database_url().expect("validated");
     let pool = calendarshare::db::connect(database_url).await;
-    calendarshare::db::run_migrations(&pool).await.expect("migrations failed");
+    calendarshare::db::run_migrations(&pool)
+        .await
+        .expect("migrations failed");
 
     let app_state = calendarshare::auth::oauth::AuthState {
         config: config.clone(),
@@ -37,7 +39,10 @@ async fn main() -> anyhow::Result<()> {
     let auth_routes = axum::Router::new()
         .route("/auth/login", get(calendarshare::auth::oauth::login))
         .route("/auth/logout", get(calendarshare::auth::oauth::logout))
-        .route("/auth/google/callback", get(calendarshare::auth::oauth::callback));
+        .route(
+            "/auth/google/callback",
+            get(calendarshare::auth::oauth::callback),
+        );
 
     let api_routes = calendarshare::auth::handlers::router()
         .merge(auth_routes)
@@ -46,8 +51,7 @@ async fn main() -> anyhow::Result<()> {
     // Serve the compiled frontend from ./../frontend/dist, falling back to
     // index.html for client-side routes (SPA routing). API/auth routes above
     // take precedence, so they are never shadowed by the static fallback.
-    let frontend_dir =
-        std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "../frontend/dist".into());
+    let frontend_dir = std::env::var("FRONTEND_DIR").unwrap_or_else(|_| "../frontend/dist".into());
 
     let serve_dir = ServeDir::new(&frontend_dir);
 
@@ -87,7 +91,9 @@ async fn main() -> anyhow::Result<()> {
                 .layer(calendarshare::middleware::cors::cors_layer(&[])),
         );
 
-    let addr: SocketAddr = format!("0.0.0.0:{}", config.port).parse().expect("invalid port");
+    let addr: SocketAddr = format!("0.0.0.0:{}", config.port)
+        .parse()
+        .expect("invalid port");
     tracing::info!(%addr, %frontend_dir, "listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

@@ -65,16 +65,25 @@ state=calendarshare",
         )
     }
 
-    async fn exchange_code(&self, code: &str) -> Result<crate::calendar::models::GoogleTokenResponse, reqwest::Error> {
+    async fn exchange_code(
+        &self,
+        code: &str,
+    ) -> Result<crate::calendar::models::GoogleTokenResponse, reqwest::Error> {
         let client = reqwest::Client::new();
         client
             .post("https://oauth2.googleapis.com/token")
             .form(&[
                 ("client_id", self.config.google_client_id_or("").as_str()),
-                ("client_secret", self.config.google_client_secret_or("").as_str()),
+                (
+                    "client_secret",
+                    self.config.google_client_secret_or("").as_str(),
+                ),
                 ("code", code),
                 ("grant_type", "authorization_code"),
-                ("redirect_uri", self.config.google_redirect_uri_or("").as_str()),
+                (
+                    "redirect_uri",
+                    self.config.google_redirect_uri_or("").as_str(),
+                ),
             ])
             .send()
             .await?
@@ -90,7 +99,9 @@ impl OauthClient for GoogleOauthClient {
     }
 
     async fn handle_callback(&self, code: String) -> Result<CallbackResult, AppError> {
-        let token = self.exchange_code(&code).await
+        let token = self
+            .exchange_code(&code)
+            .await
             .map_err(|e| AppError::CalendarProviderUnavailable(e.to_string()))?;
 
         let user_info = reqwest::Client::new()
@@ -105,10 +116,13 @@ impl OauthClient for GoogleOauthClient {
             .await
             .map_err(|e| AppError::CalendarProviderUnavailable(e.to_string()))?;
 
-        let access_encrypted = crate::encryption::encrypt(&token.access_token, self.config.token_encryption_key_or())
-            .map_err(|e| AppError::InternalError(e))?;
-        let refresh_encrypted = token.refresh_token.as_ref()
-            .map(|r| crate::encryption::encrypt(r, self.config.token_encryption_key_or()).unwrap_or_else(|_| r.clone()));
+        let access_encrypted =
+            crate::encryption::encrypt(&token.access_token, self.config.token_encryption_key_or())
+                .map_err(|e| AppError::InternalError(e))?;
+        let refresh_encrypted = token.refresh_token.as_ref().map(|r| {
+            crate::encryption::encrypt(r, self.config.token_encryption_key_or())
+                .unwrap_or_else(|_| r.clone())
+        });
 
         let expires_at = chrono::Utc::now() + chrono::Duration::seconds(token.expires_in);
 
@@ -117,7 +131,8 @@ impl OauthClient for GoogleOauthClient {
             &user_info.email,
             user_info.name.as_deref(),
             user_info.picture.as_deref(),
-        ).await?;
+        )
+        .await?;
 
         let connection = crate::calendar::models::UpsertConnection {
             id: uuid::Uuid::new_v4(),
@@ -129,10 +144,12 @@ impl OauthClient for GoogleOauthClient {
             expires_at: Some(expires_at),
         };
 
-        crate::db::queries::upsert_connection(&self.pool, &connection).await
+        crate::db::queries::upsert_connection(&self.pool, &connection)
+            .await
             .map_err(|e| AppError::InternalError(e.to_string()))?;
 
-        let signature = crate::auth::session::sign_session(self.config.session_secret_or(), &user.id);
+        let signature =
+            crate::auth::session::sign_session(self.config.session_secret_or(), &user.id);
         Ok(CallbackResult {
             user_id: user.id.to_string(),
             signature,
@@ -162,16 +179,27 @@ pub async fn callback(
     if let Some(err) = query.error {
         return Err(AppError::AuthError(format!("oauth error: {}", err)));
     }
-    let code = query.code.ok_or(AppError::AuthError("missing code".into()))?;
+    let code = query
+        .code
+        .ok_or(AppError::AuthError("missing code".into()))?;
 
     let client = GoogleOauthClient::new(state.config.clone(), state.pool.clone());
     let result = client.handle_callback(code).await?;
 
     let cookie_value = format!("{}:{}", result.user_id, result.signature);
     let mut headers = HeaderMap::new();
-    headers.insert("set-cookie", set_cookie_header(&cookie_value, 365 * 24 * 3600));
+    headers.insert(
+        "set-cookie",
+        set_cookie_header(&cookie_value, 365 * 24 * 3600),
+    );
 
-    let redirect = format!("{}/dashboard", state.config.public_base_url_or("http://localhost:3000").trim_end_matches('/'));
+    let redirect = format!(
+        "{}/dashboard",
+        state
+            .config
+            .public_base_url_or("http://localhost:3000")
+            .trim_end_matches('/')
+    );
     Ok((headers, Redirect::temporary(&redirect)))
 }
 
@@ -179,7 +207,13 @@ pub async fn logout(State(state): State<AuthState>) -> impl IntoResponse {
     let mut headers = HeaderMap::new();
     headers.insert("set-cookie", set_cookie_header("", 0));
 
-    let redirect = format!("{}/", state.config.public_base_url_or("http://localhost:3000").trim_end_matches('/'));
+    let redirect = format!(
+        "{}/",
+        state
+            .config
+            .public_base_url_or("http://localhost:3000")
+            .trim_end_matches('/')
+    );
     (headers, Redirect::temporary(&redirect))
 }
 
@@ -195,19 +229,24 @@ pub async fn me(
     State(state): State<AuthState>,
     headers: HeaderMap,
 ) -> Result<Json<MeResponse>, AppError> {
-    let session_id = crate::auth::extract_session_id(&headers).ok_or(AppError::AuthError("missing session".into()))?;
+    let session_id = crate::auth::extract_session_id(&headers)
+        .ok_or(AppError::AuthError("missing session".into()))?;
     let parts: Vec<&str> = session_id.split(':').collect();
     if parts.len() != 2 {
         return Err(AppError::AuthError("invalid session".into()));
     }
-    let user_id: uuid::Uuid = parts[0].parse().map_err(|_| AppError::AuthError("invalid session".into()))?;
+    let user_id: uuid::Uuid = parts[0]
+        .parse()
+        .map_err(|_| AppError::AuthError("invalid session".into()))?;
     let signature = parts[1];
 
-    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature) {
+    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature)
+    {
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0]).await?
+    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0])
+        .await?
         .ok_or(AppError::AuthError("user not found".into()))?;
 
     Ok(Json(MeResponse {

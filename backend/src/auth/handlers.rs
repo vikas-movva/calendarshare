@@ -11,8 +11,8 @@ use crate::auth::oauth::AuthState;
 use crate::auth::AuthenticatedUser;
 use crate::calendar::provider::CalendarProvider;
 use crate::error::AppError;
-use crate::shares::service::{ShareService, RealTokenService};
 use crate::shares::models::{OwnerInfo, PublicShareResponse, ShareRange, Visibility};
+use crate::shares::service::{RealTokenService, ShareService};
 
 pub async fn health() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": "ok" }))
@@ -54,11 +54,14 @@ pub async fn list_events(
     Query(params): Query<EventsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = authenticate(&state, &headers).await?;
-    let calendar = crate::db::queries::get_calendar_by_id(&state.pool, calendar_id, user.user_id).await?
+    let calendar = crate::db::queries::get_calendar_by_id(&state.pool, calendar_id, user.user_id)
+        .await?
         .ok_or(AppError::CalendarNotFound)?;
 
     let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id);
-    let events = provider.list_events(&calendar.provider_calendar_id, params.start, params.end).await?;
+    let events = provider
+        .list_events(&calendar.provider_calendar_id, params.start, params.end)
+        .await?;
     Ok(Json(serde_json::json!({
         "events": events.into_iter().map(|e| serde_json::json!({
             "provider_event_id": e.provider_event_id,
@@ -89,14 +92,21 @@ pub async fn create_share_handler(
     Json(req): Json<CreateShareRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), AppError> {
     let user = authenticate(&state, &headers).await?;
-    let calendar = crate::db::queries::get_calendar_by_id(&state.pool, req.calendar_id, user.user_id).await?
-        .ok_or(AppError::CalendarNotFound)?;
+    let calendar =
+        crate::db::queries::get_calendar_by_id(&state.pool, req.calendar_id, user.user_id)
+            .await?
+            .ok_or(AppError::CalendarNotFound)?;
 
-    let visibility = Visibility::parse(&req.visibility).ok_or(AppError::InvalidVisibility(req.visibility.clone()))?;
-    let timezone = req.timezone.unwrap_or_else(|| calendar.timezone.clone().unwrap_or_else(|| "UTC".into()));
+    let visibility = Visibility::parse(&req.visibility)
+        .ok_or(AppError::InvalidVisibility(req.visibility.clone()))?;
+    let timezone = req
+        .timezone
+        .unwrap_or_else(|| calendar.timezone.clone().unwrap_or_else(|| "UTC".into()));
 
     let provider = make_provider_with_connection(&state, user.user_id, calendar.connection_id);
-    let events = provider.list_events(&calendar.provider_calendar_id, req.start_time, req.end_time).await?;
+    let events = provider
+        .list_events(&calendar.provider_calendar_id, req.start_time, req.end_time)
+        .await?;
 
     let service = ShareService {
         pool: state.pool.clone(),
@@ -104,20 +114,31 @@ pub async fn create_share_handler(
         public_base_url: state.config.public_base_url_or("http://localhost:3000"),
     };
 
-    let result = service.create_share(user.user_id, req.calendar_id, events, crate::shares::service::CreateShareRequest {
-        calendar_id: req.calendar_id,
-        start_time: req.start_time,
-        end_time: req.end_time,
-        visibility,
-        expires_at: req.expires_at,
-        timezone,
-    }).await.map_err(|e| AppError::InternalError(e))?;
+    let result = service
+        .create_share(
+            user.user_id,
+            req.calendar_id,
+            events,
+            crate::shares::service::CreateShareRequest {
+                calendar_id: req.calendar_id,
+                start_time: req.start_time,
+                end_time: req.end_time,
+                visibility,
+                expires_at: req.expires_at,
+                timezone,
+            },
+        )
+        .await
+        .map_err(|e| AppError::InternalError(e))?;
 
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!({
-        "id": result.share.id,
-        "url": result.url,
-        "expires_at": result.share.expires_at,
-    }))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({
+            "id": result.share.id,
+            "url": result.url,
+            "expires_at": result.share.expires_at,
+        })),
+    ))
 }
 
 pub async fn list_shares_handler(
@@ -146,7 +167,8 @@ pub async fn revoke_share_handler(
     Path(share_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let user = authenticate(&state, &headers).await?;
-    let share = crate::db::queries::revoke_share(&state.pool, share_id, user.user_id).await?
+    let share = crate::db::queries::revoke_share(&state.pool, share_id, user.user_id)
+        .await?
         .ok_or(AppError::ShareAccessDenied)?;
     Ok(Json(serde_json::json!({ "revoked": true, "id": share.id })))
 }
@@ -161,7 +183,9 @@ pub async fn public_share(
         public_base_url: state.config.public_base_url_or("http://localhost:3000"),
     };
 
-    let (share, events) = service.public_share_events(&token).await
+    let (share, events) = service
+        .public_share_events(&token)
+        .await
         .map_err(|e| match e.as_str() {
             "share revoked" => AppError::ShareRevoked,
             "share expired" => AppError::ShareExpired,
@@ -169,13 +193,19 @@ pub async fn public_share(
         })?
         .ok_or(AppError::ShareNotFound)?;
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &share.user_id.to_string()).await?
+    let user = crate::db::queries::get_user_by_email(&state.pool, &share.user_id.to_string())
+        .await?
         .ok_or(AppError::InternalError("owner not found".into()))?;
 
     let visibility = share.visibility_enum().as_str().to_string();
     Ok(Json(PublicShareResponse {
-        owner: OwnerInfo { display_name: user.display_name },
-        range: ShareRange { start: share.start_time, end: share.end_time },
+        owner: OwnerInfo {
+            display_name: user.display_name,
+        },
+        range: ShareRange {
+            start: share.start_time,
+            end: share.end_time,
+        },
         timezone: share.timezone,
         visibility,
         events,
@@ -185,7 +215,8 @@ pub async fn public_share(
 fn make_provider(
     state: &AuthState,
     user_id: Uuid,
-) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient> {
+) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient>
+{
     let oauth = crate::calendar::models::RealGoogleOAuthClient::new(
         state.config.google_client_id_or(""),
         state.config.google_client_secret_or(""),
@@ -198,24 +229,33 @@ fn make_provider_with_connection(
     state: &AuthState,
     user_id: Uuid,
     connection_id: Uuid,
-) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient> {
+) -> crate::calendar::google::GoogleCalendarProvider<crate::calendar::models::RealGoogleOAuthClient>
+{
     make_provider(state, user_id).with_connection(connection_id)
 }
 
-async fn authenticate(state: &AuthState, headers: &HeaderMap) -> Result<AuthenticatedUser, AppError> {
-    let session_id = crate::auth::extract_session_id(headers).ok_or(AppError::AuthError("missing session".into()))?;
+async fn authenticate(
+    state: &AuthState,
+    headers: &HeaderMap,
+) -> Result<AuthenticatedUser, AppError> {
+    let session_id = crate::auth::extract_session_id(headers)
+        .ok_or(AppError::AuthError("missing session".into()))?;
     let parts: Vec<&str> = session_id.split(':').collect();
     if parts.len() != 2 {
         return Err(AppError::AuthError("invalid session".into()));
     }
-    let user_id: Uuid = parts[0].parse().map_err(|_| AppError::AuthError("invalid session".into()))?;
+    let user_id: Uuid = parts[0]
+        .parse()
+        .map_err(|_| AppError::AuthError("invalid session".into()))?;
     let signature = parts[1];
 
-    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature) {
+    if !crate::auth::session::verify_session(state.config.session_secret_or(), &user_id, signature)
+    {
         return Err(AppError::AuthError("invalid session signature".into()));
     }
 
-    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0]).await?
+    let user = crate::db::queries::get_user_by_email(&state.pool, &parts[0])
+        .await?
         .ok_or(AppError::AuthError("user not found".into()))?;
 
     Ok(AuthenticatedUser {
@@ -232,7 +272,10 @@ pub fn router() -> Router<AuthState> {
         .route("/api/me", get(me_handler))
         .route("/api/calendars", get(list_calendars))
         .route("/api/calendars/:id/events", get(list_events))
-        .route("/api/shares", post(create_share_handler).get(list_shares_handler))
+        .route(
+            "/api/shares",
+            post(create_share_handler).get(list_shares_handler),
+        )
         .route("/api/shares/:id", delete(revoke_share_handler))
         .route("/api/public/shares/:token", get(public_share))
 }

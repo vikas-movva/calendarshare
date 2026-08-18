@@ -28,17 +28,19 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
     }
 
     async fn get_valid_access_token(&self) -> Result<String, CalendarProviderError> {
-        let conn = match self.connection_id {
-            Some(id) => crate::db::queries::get_calendar_connection_by_id(&self.pool, id, self.user_id).await?,
-            None => {
-                sqlx::query_as::<_, crate::calendar::models::CalendarConnection>(
+        let conn =
+            match self.connection_id {
+                Some(id) => {
+                    crate::db::queries::get_calendar_connection_by_id(&self.pool, id, self.user_id)
+                        .await?
+                }
+                None => sqlx::query_as::<_, crate::calendar::models::CalendarConnection>(
                     "SELECT * FROM calendar_connections WHERE user_id = $1 AND provider = 'google'",
                 )
                 .bind(self.user_id)
                 .fetch_optional(&self.pool)
-                .await?
-            }
-        };
+                .await?,
+            };
 
         let conn = conn.ok_or(CalendarProviderError::MissingCredentials)?;
 
@@ -100,46 +102,50 @@ impl<C: crate::calendar::models::GoogleOAuthClient> GoogleCalendarProvider<C> {
         let start = item.start.as_ref()?;
         let end = item.end.as_ref()?;
 
-        let (start_dt, end_dt, is_all_day, timezone) =
-            if let Some(date_str) = &start.date {
-                let naive_start = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d").ok()?;
-                let naive_end_str = end.date.as_deref().unwrap_or(date_str);
-                let naive_end = chrono::NaiveDate::parse_from_str(naive_end_str, "%Y-%m-%d").ok()?;
-                let start_local = naive_start.and_hms_opt(0, 0, 0)?;
-                let end_local = if naive_end > naive_start {
-                    naive_end.and_hms_opt(0, 0, 0)?
-                } else {
-                    (naive_start + chrono::Duration::days(1)).and_hms_opt(0, 0, 0)?
-                };
-                let tz: chrono_tz::Tz = start
-                    .timezone
-                    .as_deref()
-                    .unwrap_or("UTC")
-                    .parse()
-                    .unwrap_or(chrono_tz::UTC);
-                let start_utc = start_local
-                    .and_local_timezone(tz)
-                    .earliest()
-                    .map(|d| d.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|| start_local.and_utc().with_timezone(&chrono::Utc));
-                let end_utc = end_local
-                    .and_local_timezone(tz)
-                    .earliest()
-                    .map(|d| d.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|| end_local.and_utc().with_timezone(&chrono::Utc));
-                (
-                    start_utc,
-                    end_utc,
-                    true,
-                    start.timezone.clone().or(end.timezone.clone()),
-                )
+        let (start_dt, end_dt, is_all_day, timezone) = if let Some(date_str) = &start.date {
+            let naive_start = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d").ok()?;
+            let naive_end_str = end.date.as_deref().unwrap_or(date_str);
+            let naive_end = chrono::NaiveDate::parse_from_str(naive_end_str, "%Y-%m-%d").ok()?;
+            let start_local = naive_start.and_hms_opt(0, 0, 0)?;
+            let end_local = if naive_end > naive_start {
+                naive_end.and_hms_opt(0, 0, 0)?
             } else {
-                let tz = start.timezone.as_deref().unwrap_or("UTC");
-                let start_dt = parse_rfc3339(&start.date_time.as_deref()?, tz)?;
-                let end_tz = end.timezone.as_deref().unwrap_or(tz);
-                let end_dt = parse_rfc3339(&end.date_time.as_deref()?, end_tz)?;
-                (start_dt, end_dt, false, start.timezone.clone().or(end.timezone.clone()))
+                (naive_start + chrono::Duration::days(1)).and_hms_opt(0, 0, 0)?
             };
+            let tz: chrono_tz::Tz = start
+                .timezone
+                .as_deref()
+                .unwrap_or("UTC")
+                .parse()
+                .unwrap_or(chrono_tz::UTC);
+            let start_utc = start_local
+                .and_local_timezone(tz)
+                .earliest()
+                .map(|d| d.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|| start_local.and_utc().with_timezone(&chrono::Utc));
+            let end_utc = end_local
+                .and_local_timezone(tz)
+                .earliest()
+                .map(|d| d.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|| end_local.and_utc().with_timezone(&chrono::Utc));
+            (
+                start_utc,
+                end_utc,
+                true,
+                start.timezone.clone().or(end.timezone.clone()),
+            )
+        } else {
+            let tz = start.timezone.as_deref().unwrap_or("UTC");
+            let start_dt = parse_rfc3339(&start.date_time.as_deref()?, tz)?;
+            let end_tz = end.timezone.as_deref().unwrap_or(tz);
+            let end_dt = parse_rfc3339(&end.date_time.as_deref()?, end_tz)?;
+            (
+                start_dt,
+                end_dt,
+                false,
+                start.timezone.clone().or(end.timezone.clone()),
+            )
+        };
 
         Some(CalendarEvent {
             provider_event_id: item.id.clone(),

@@ -160,20 +160,15 @@ impl Config {
     }
 
     pub fn token_encryption_key_or(&self) -> &[u8; 32] {
-        self.token_encryption_key
-            .as_ref()
-            .unwrap_or(&ZERO_KEY)
+        self.token_encryption_key.as_ref().unwrap_or(&ZERO_KEY)
     }
 }
 
 static ZERO_KEY: [u8; 32] = [0u8; 32];
 
 fn parse_secret(value: &str, expected_len: usize) -> Result<[u8; 32], ConfigError> {
-    let bytes = base64::Engine::decode(
-        &base64::engine::general_purpose::STANDARD,
-        value,
-    )
-    .map_err(|_| ConfigError::InvalidSecret)?;
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, value)
+        .map_err(|_| ConfigError::InvalidSecret)?;
     if bytes.len() != expected_len {
         return Err(ConfigError::InvalidSecret);
     }
@@ -192,7 +187,9 @@ impl From<ConfigError> for Vec<String> {
     fn from(err: ConfigError) -> Self {
         match err {
             ConfigError::Missing(name) => vec![name.to_string()],
-            ConfigError::InvalidSecret => vec!["SESSION_SECRET / TOKEN_ENCRYPTION_KEY must be 32 bytes base64".into()],
+            ConfigError::InvalidSecret => {
+                vec!["SESSION_SECRET / TOKEN_ENCRYPTION_KEY must be 32 bytes base64".into()]
+            }
         }
     }
 }
