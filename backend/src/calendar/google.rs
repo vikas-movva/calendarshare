@@ -321,3 +321,34 @@ impl<C: crate::calendar::models::GoogleOAuthClient> crate::calendar::provider::C
         Ok(events)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_rfc3339;
+
+    /// A `dateTime` Google sends with no offset (the pre-`timeZone=UTC` bug)
+    /// was being misinterpreted as UTC, shifting events by the calendar's UTC
+    /// offset. With `timeZone=UTC` Google now always includes an explicit
+    /// offset, so every real `dateTime` goes down the offset-aware path and
+    /// must land on the correct UTC instant.
+    #[test]
+    fn parse_rfc3339_handles_explicit_offset() {
+        // 02:30 America/Toronto (EDT, UTC-4) == 06:30 UTC. The string includes
+        // the -04:00 offset, so it must resolve to 06:30Z rather than 02:30Z.
+        let dt = parse_rfc3339("2026-08-20T02:30:00-04:00", "UTC").unwrap();
+        assert_eq!(dt.to_rfc3339(), "2026-08-20T06:30:00+00:00");
+    }
+
+    #[test]
+    fn parse_rfc3339_handles_utc_z_suffix() {
+        let dt = parse_rfc3339("2026-08-20T06:30:00Z", "America/Toronto").unwrap();
+        assert_eq!(dt.to_rfc3339(), "2026-08-20T06:30:00+00:00");
+    }
+
+    #[test]
+    fn parse_rfc3339_does_not_shift_when_offset_matches_utc() {
+        // A genuinely-UTC event stays put.
+        let dt = parse_rfc3339("2026-08-20T13:00:00Z", "America/Toronto").unwrap();
+        assert_eq!(dt.to_rfc3339(), "2026-08-20T13:00:00+00:00");
+    }
+}

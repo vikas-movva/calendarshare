@@ -227,6 +227,13 @@ impl GoogleOAuthClient for RealGoogleOAuthClient {
             .query(&[
                 ("timeMin", time_min),
                 ("timeMax", time_max),
+                // Request UTC so Google returns every event's `dateTime` with an
+                // explicit offset (a `Z`/`+00:00` suffix). When `timeZone` is
+                // omitted Google defaults to the calendar's time zone and omits
+                // the offset, which made the backend misinterpret local wall-clock
+                // times as UTC and shift events by the calendar's UTC offset
+                // (e.g. a 2:30am event rendered as 10:30pm the previous day).
+                ("timeZone", "UTC"),
                 ("singleEvents", "true"),
                 ("orderBy", "startTime"),
                 ("maxResults", "2500"),
