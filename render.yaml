@@ -31,14 +31,13 @@ services:
       - key: FRONTEND_DIR
         value: ./frontend/dist
       - key: PUBLIC_BASE_URL
-        value: https://calendershare.onrender.com
+        value: https://calendarshare.onrender.com
       - key: GOOGLE_CLIENT_ID
-        # Set your production Client ID in the Render dashboard (never commit it).
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: GOOGLE_REDIRECT_URI
-        value: https://calendershare.onrender.com/auth/google/callback
+        value: https://calendarshare.onrender.com/auth/google/callback
       - key: SESSION_SECRET
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
@@ -57,7 +56,7 @@ databases:
   - name: calendarshare-db
     plan: free
     region: oregon
-    postgresVersion: "16"
+    postgresVersion: "18"
     # Run migrations on every deploy.
     # (Render has no direct "postStart"; the binary runs migrations at startup.)
 
