@@ -47,30 +47,13 @@ services:
         fromDatabase:
           name: calendarshare-db
     healthCheckPath: /health
-    # The backend serves the frontend, so there is no separate static site.
 
-# ---------------------------------------------------------------------------
-# Managed PostgreSQL — free 256 MB
-# ---------------------------------------------------------------------------
 databases:
   - name: calendarshare-db
     plan: free
     region: oregon
     postgresVersion: "18"
-    # Run migrations on every deploy.
-    # (Render has no direct "postStart"; the binary runs migrations at startup.)
 
-# ---------------------------------------------------------------------------
-# Custom domain (optional)
-# ---------------------------------------------------------------------------
-# domains:
-#   - your-custom-domain.com
-# If you add a custom domain later, uncomment and update the env vars above
-# (PUBLIC_BASE_URL / GOOGLE_REDIRECT_URI) to match it.
-
-# ---------------------------------------------------------------------------
-# Persistent storage for any local state (none required for MVP)
-# ---------------------------------------------------------------------------
 disk:
   - name: data
     mountPath: /data
