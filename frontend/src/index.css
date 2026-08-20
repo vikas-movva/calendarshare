@@ -126,6 +126,11 @@ body {
   line-height: 1.6;
 }
 
+#root {
+  min-width: 0;
+  overflow-x: clip;
+}
+
 ::selection {
   background-color: rgb(var(--color-accent-rgb, 0 212 255));
   color: rgb(var(--color-on-accent-rgb, 5 8 16));
@@ -147,6 +152,8 @@ body {
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .text-gradient {
@@ -159,6 +166,7 @@ body {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
+  overflow-wrap: anywhere;
 }
 
 .bg-grid {
@@ -206,6 +214,166 @@ body {
   }
 }
 
+@media (max-width: 640px) {
+  .display {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .chip {
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* ============================================================
+   Modular Calendar theming — style the component to match the
+   CalShare design system (cards, accent chips, muted labels).
+   ============================================================ */
+
+/*
+   Selectors are namespaced under `.mc-calendar` so these overrides beat the
+   component's own (same-name, same-specificity) rules in `calendar.css`, which
+   Vite bundles after this file. Without the extra specificity the component's
+   default light/blue theme would win and the dark-accent project theme below
+   would silently not apply.
+*/
+
+/* Root — match the app's type scale and card surface. The component paints
+   text via `var(--mc-text)` (#1f2937); override so descendants that do not set
+   their own colour stay readable on the dark surface. Double-class selector
+   bumps this above the component's own `.mc-calendar` (which re-declares
+   `color: var(--mc-text)`) despite the bundled `calendar.css` ordering after
+   this file. */
+.mc-calendar.mc-calendar {
+  font-size: 0.8rem;
+  color: rgb(var(--color-content-rgb, 226 232 240));
+  background: rgb(var(--color-card-rgb, 19 28 46) / 0.55);
+  border: 1px solid rgb(var(--color-border-rgb, 51 65 85));
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+}
+
+/* Day grid — subtle rule lines instead of the default heavier borders */
+.mc-calendar .mc-calendar__days {
+  border-left-color: rgb(var(--color-border-rgb, 51 65 85));
+  border-bottom-color: rgb(var(--color-border-rgb, 51 65 85));
+}
+
+.mc-calendar .mc-calendar__column {
+  border-right-color: rgb(var(--color-border-rgb, 51 65 85));
+  background: rgb(var(--color-surface-rgb, 15 10 26) / 0.4);
+}
+
+/* Greyed filler cells (dates outside the active range) read dimmer */
+.mc-calendar .mc-calendar__column--grey {
+  background: rgb(var(--color-surface-alt-rgb, 10 5 16) / 0.35);
+  opacity: 0.55;
+}
+
+/* Day number drawn above each column's grid */
+.mc-calendar .mc-calendar__cellnum {
+  color: rgb(var(--color-content-faint-rgb, 100 116 139));
+}
+
+/* Day headers — uppercase tracking-wide muted, like .section-title */
+.mc-calendar .mc-calendar__head-cell {
+  padding: 8px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgb(var(--color-content-faint-rgb, 100 116 139));
+  background: rgb(var(--color-surface-alt-rgb, 10 5 16) / 0.6);
+}
+
+/* All-day strip */
+.mc-calendar .mc-allday {
+  background: rgb(var(--color-surface-alt-rgb, 10 5 16) / 0.5);
+  border-bottom: 1px solid rgb(var(--color-border-rgb, 51 65 85));
+}
+
+.mc-calendar .mc-allday__chip {
+  border-radius: 8px;
+  background: rgb(var(--color-accent-rgb, 167 139 250) / 0.12);
+  border: 1px solid rgb(var(--color-accent-rgb, 167 139 250) / 0.35);
+  color: rgb(var(--color-accent-rgb, 167 139 250));
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 2px 6px;
+}
+
+/* Timed grid — the component controls height from the month budget. */
+.mc-calendar .mc-grid__slot {
+  border-bottom-color: rgb(var(--color-border-rgb, 51 65 85) / 0.5);
+  background: transparent;
+}
+
+.mc-calendar .mc-grid__timed {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(100% - 1px),
+    rgb(var(--color-border-rgb, 51 65 85) / 0.4) calc(100% - 1px)
+  );
+}
+
+/* Event chips — accent-tinted, rounded, matching app chip style */
+.mc-calendar .mc-timed {
+  border-radius: 8px;
+  background: rgb(var(--color-accent-rgb, 167 139 250) / 0.12);
+  border: 1px solid rgb(var(--color-accent-rgb, 167 139 250) / 0.35);
+  color: rgb(var(--color-accent-rgb, 167 139 250));
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 2px 5px;
+}
+
+.mc-calendar .mc-timed:hover {
+  background: rgb(var(--color-accent-rgb, 167 139 250) / 0.2);
+  border-color: rgb(var(--color-accent-hover-rgb, 139 92 246) / 0.5);
+}
+
+.mc-calendar .mc-timed:focus-visible,
+.mc-calendar .mc-allday__chip:focus-visible {
+  outline: 2px solid rgb(var(--color-accent-rgb, 167 139 250));
+  outline-offset: 1px;
+}
+
+.mc-calendar .mc-timed__time {
+  color: rgb(var(--color-content-muted-rgb, 148 163 184));
+  font-size: 0.65rem;
+}
+
+/* Day-boundary markers — subtle left edge accent */
+.mc-calendar .mc-timed--first {
+  border-left: 2px solid rgb(var(--color-accent-hover-rgb, 139 92 246));
+}
+
+.mc-calendar .mc-timed--last {
+  border-right: 2px solid rgb(var(--color-accent-hover-rgb, 139 92 246));
+}
+
+/* Custom-rendered chips keep the same shell */
+.mc-calendar .mc-timed--custom {
+  display: flex;
+  align-items: center;
+}
+
+.form-select {
+  color-scheme: dark light;
+}
+
+.form-select option {
+  background-color: rgb(var(--color-field-rgb, 30 41 59));
+  color: rgb(var(--color-content-rgb, 226 232 240));
+}
+
 @layer components {
   .card {
     background: rgb(var(--color-card-rgb, 19 28 46) / 0.6);
@@ -241,7 +409,16 @@ body {
     padding: 0.55rem 0.85rem;
     font-size: 0.85rem;
   }
-  .btn-primary.inline-flex {
+  /* Small inline form buttons (e.g. Vote actions) sit inside flex rows and
+     must keep their natural width instead of being stretched full-width. */
+  .btn-primary.inline-flex,
+  .btn-primary.auto {
+    width: auto;
+  }
+  .btn-ghost {
+    width: 100%;
+  }
+  .btn-ghost.auto {
     width: auto;
   }
 }
@@ -270,14 +447,16 @@ body {
     font-size: 0.72rem;
     font-weight: 600;
     padding: 0.2rem 0.6rem;
-    border-radius: 999px;
+    border-radius: 8px;
     text-transform: uppercase;
     letter-spacing: 0.02em;
+    overflow: hidden;
   }
   .chip-green { background: rgba(16, 185, 129, 0.15); color: rgb(16 185 129); }
   .chip-amber { background: rgba(245, 158, 11, 0.15); color: rgb(245 158 11); }
   .chip-red   { background: rgba(244, 63, 94, 0.15); color: rgb(244 63 94); }
   .chip-slate { background: rgba(148 163 184, 0.15); color: rgb(148 163 184); }
+  .chip-accent { background: rgb(var(--color-accent-rgb, 167 139 250) / 0.15); color: rgb(var(--color-accent-rgb, 167 139 250)); }
 
   .section-title {
     font-size: 0.78rem;

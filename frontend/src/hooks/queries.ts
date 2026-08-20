@@ -10,9 +10,12 @@ export function useMe() {
 }
 
 export function useCalendars() {
+  const me = useMe()
   return useQuery({
     queryKey: ["calendars"],
     queryFn: () => api.listCalendars(),
+    enabled: me.isSuccess,
+    retry: false,
   });
 }
 

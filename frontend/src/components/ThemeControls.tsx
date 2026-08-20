@@ -78,7 +78,7 @@ export default function ThemeControls({
               transition={{ duration: 0.15 }}
               role="menu"
               aria-label="Accent colour"
-              className="absolute right-0 mt-2 z-50 p-3 rounded-xl bg-surface border border-border shadow-2xl shadow-black/40 flex flex-col gap-1 w-44"
+              className="absolute right-0 mt-2 z-50 w-44 max-w-[calc(100vw-2rem)] p-3 rounded-xl bg-surface border border-border shadow-2xl shadow-black/40 flex flex-col gap-1"
             >
               <span className="text-xs font-medium text-content-faint mb-1 px-1">Accent colour</span>
               <div className="grid grid-cols-5 gap-2">

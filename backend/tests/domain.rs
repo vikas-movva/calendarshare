@@ -75,8 +75,12 @@ fn owner_is_hidden_under_busy_and_title_time() {
 fn owner_is_exposed_under_details() {
     let owner = uuid::uuid!("11111111-1111-1111-1111-111111111111");
     let e = event("Dinner", "2026-08-21T23:00:00Z", "2026-08-22T01:00:00Z");
-    let projected =
-        project_event_for_visibility(&e, Visibility::Details, Some(owner), Some("Alice".to_string()));
+    let projected = project_event_for_visibility(
+        &e,
+        Visibility::Details,
+        Some(owner),
+        Some("Alice".to_string()),
+    );
     assert_eq!(projected.owner_user_id, Some(owner));
     assert_eq!(projected.owner_display_name.as_deref(), Some("Alice"));
 }

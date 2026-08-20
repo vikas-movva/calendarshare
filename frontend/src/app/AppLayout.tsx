@@ -1,14 +1,15 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useMe } from '../hooks/queries'
 import ThemeControls from '../components/ThemeControls'
-import { CalendarSmall, LogOutSmall, PersonSmall, ShareSmall, GithubSmall, TwitterSmall, LinkedInSmall, CalendarGridSmall} from '../components/Icons'
+import { Logo } from '../components/Logo'
+import { LogOutSmall, LogInSmall, ShareSmall, GithubSmall, TwitterSmall, LinkedInSmall, CalendarGridSmall} from '../components/Icons'
 import { useState } from 'react'
 
 function PageTransition() {
   const location = useLocation()
 
-  const variants = {
+  const variants: Variants = {
     initial: { opacity: 0, x: 48 },
     animate: { opacity: 1, x: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
   }
@@ -52,7 +53,7 @@ function ProfileMenu() {
 
       {open && (
         <div
-          className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+          className="absolute right-0 z-50 mt-2 w-52 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-card shadow-lg"
           onMouseDown={(e) => e.preventDefault()}
         >
           <div className="border-b border-border px-4 py-3">
@@ -92,14 +93,12 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-surface text-content">
       <header className="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-surface/80 border-b border-border">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-accent to-amber-400 text-on-accent shadow-sm">
-              <CalendarSmall />
-            </span>
-            <span className="text-lg font-bold tracking-tight">CalendarShare</span>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+<Link to="/" className="flex min-w-0 items-center gap-2">
+            <Logo className="h-9 w-9 shrink-0" />
+            <span className="hidden text-lg font-bold tracking-tight sm:inline">CalendarShare</span>
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 items-center gap-1">
             {user ? (
               <>
                 <Link
@@ -115,10 +114,10 @@ export default function AppLayout() {
             ) : (
               <button
                 onClick={() => (window.location.href = '/auth/login')}
-                className="flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-on-accent font-semibold text-sm hover:bg-accent-hover transition-colors"
+                className="flex items-center gap-2 rounded-xl bg-accent px-3 py-2 text-on-accent font-semibold text-sm hover:bg-accent-hover transition-colors sm:px-4"
               >
-                <PersonSmall />
-                Sign in
+                <LogInSmall />
+                <span className="hidden sm:inline">Sign in</span>
               </button>
             )}
             <div className="ml-2 flex sm:ml-3">

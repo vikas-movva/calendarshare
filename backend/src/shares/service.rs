@@ -1,4 +1,5 @@
-use chrono::{DateTime, Timelike};
+use chrono::{DateTime, Datelike, TimeZone, Timelike, Duration, LocalResult, NaiveDateTime, Utc};
+use chrono_tz::Tz;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -18,112 +19,115 @@ const SLOT_MINUTES: i64 = 30;
 /// busy events. Busy intervals are merged (overlapping/adjacent), then the
 /// working window of each calendar day is walked to find gaps. Each
 /// contiguous free gap is emitted as a single slot.
+
+/// Converts a NaiveDateTime to Utc safely, handling DST transitions without panicking.
+fn safe_local_to_utc(naive: NaiveDateTime, tz: Tz) -> DateTime<Utc> {
+    match tz.from_local_datetime(&naive) {
+        LocalResult::Single(dt) => dt.with_timezone(&Utc),
+        LocalResult::Ambiguous(dt, _) => dt.with_timezone(&Utc),
+        LocalResult::None => {
+            // Spring-forward gap: advance local time by 1 hour to fall into valid time
+            tz.from_local_datetime(&(naive + Duration::hours(1)))
+                .single()
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|| naive.and_utc())
+        }
+    }
+}
+
 pub fn compute_free_slots(
-    range_start: DateTime<chrono::Utc>,
-    range_end: DateTime<chrono::Utc>,
+    range_start: DateTime<Utc>,
+    range_end: DateTime<Utc>,
     events: &[PublicEvent],
     timezone: &str,
 ) -> Vec<crate::shares::models::FreeSlot> {
-    let tz: chrono_tz::Tz = timezone.parse().unwrap_or(chrono_tz::UTC);
-    let mut slots = Vec::new();
-
-    // Convert each event to a busy interval expressed in local minutes of day.
-    let mut busy: Vec<(i64, i64)> = events
-        .iter()
-        .map(|e| {
-            let s = e.start_time.with_timezone(&tz);
-            let en = e.end_time.with_timezone(&tz);
-            let start_min = s.hour() as i64 * 60 + s.minute() as i64;
-            let end_min = en.hour() as i64 * 60 + en.minute() as i64;
-            let end_min = if end_min <= start_min {
-                WORK_END_MIN
-            } else {
-                end_min
-            };
-            (start_min, end_min)
-        })
-        .collect();
-
-    busy.sort_by_key(|b| b.0);
-
-    // Merge overlapping/adjacent busy intervals.
-    let mut merged: Vec<(i64, i64)> = Vec::new();
-    for (s, e) in busy {
-        if let Some(last) = merged.last_mut() {
-            if s <= last.1 {
-                last.1 = last.1.max(e);
-                continue;
-            }
-        }
-        merged.push((s, e));
+    if range_start >= range_end {
+        return Vec::new();
     }
 
-    // Walk each calendar day in the range.
+    let tz: Tz = timezone.parse().unwrap_or(chrono_tz::UTC);
     let range_start_local = range_start.with_timezone(&tz);
     let range_end_local = range_end.with_timezone(&tz);
+
     let range_start_day = range_start_local.date_naive();
-    let range_end_day = range_end_local.date_naive();
-    let range_start_min = range_start_local.time().hour() as i64 * 60 + range_start_local.time().minute() as i64;
-    let range_end_min = range_end_local.time().hour() as i64 * 60 + range_end_local.time().minute() as i64;
+    // Prevent an extra zero-length day iteration if range_end falls exactly on local midnight
+    let range_end_day = if range_end_local.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+        && range_end_local > range_start_local
+    {
+        (range_end_local - Duration::milliseconds(1)).date_naive()
+    } else {
+        range_end_local.date_naive()
+    };
 
+    let mut slots = Vec::new();
     let mut cursor = range_start_day;
+
     while cursor <= range_end_day {
-        let day_start = cursor.and_hms_opt(0, 0, 0).unwrap();
-        let t0 = if cursor == range_start_day {
-            WORK_START_MIN.max(range_start_min)
-        } else {
-            WORK_START_MIN
-        };
-        let t1 = if cursor == range_end_day {
-            WORK_END_MIN.min(range_end_min)
-        } else {
-            WORK_END_MIN
+        let day_midnight = match cursor.and_hms_opt(0, 0, 0) {
+            Some(dt) => dt,
+            None => continue,
         };
 
-        // Busy intervals for this day, clamped to the working window.
-        let day_busy: Vec<(i64, i64)> = merged
+        let work_start_naive = day_midnight + Duration::minutes(WORK_START_MIN);
+        let work_end_naive = day_midnight + Duration::minutes(WORK_END_MIN);
+
+        let work_start_utc = safe_local_to_utc(work_start_naive, tz);
+        let work_end_utc = safe_local_to_utc(work_end_naive, tz);
+
+        // Clamp today's working hours window to the overall query range
+        let window_start = work_start_utc.max(range_start);
+        let window_end = work_end_utc.min(range_end);
+
+        if window_start >= window_end {
+            cursor += Duration::days(1);
+            continue;
+        }
+
+        // Intersect events with today's clamped working window directly in UTC
+        let mut day_busy: Vec<(DateTime<Utc>, DateTime<Utc>)> = events
             .iter()
-            .map(|(s, e)| {
-                let cs = (*s).max(t0);
-                let ce = (*e).min(t1);
-                (cs, ce)
-            })
-            .filter(|(s, e)| e > s)
+            .map(|e| (e.start_time.max(window_start), e.end_time.min(window_end)))
+            .filter(|(s, e)| s < e)
             .collect();
 
-        // Walk the working window and emit free gaps.
-        let mut t = t0;
-        while t < t1 {
-            let blocked = day_busy.iter().any(|(s, e)| t >= *s && t < *e);
-            if blocked {
-                t += SLOT_MINUTES;
-                continue;
-            }
-            // Find the end of this free gap (next busy start, or work end).
-            let mut gap_end = t1;
-            for (s, e) in &day_busy {
-                if *s > t && *s < gap_end {
-                    gap_end = *s;
+        day_busy.sort_by_key(|(s, _)| *s);
+
+        // Merge overlapping/adjacent busy intervals
+        let mut merged_busy: Vec<(DateTime<Utc>, DateTime<Utc>)> = Vec::new();
+        for (s, e) in day_busy {
+            if let Some(last) = merged_busy.last_mut() {
+                if s <= last.1 {
+                    last.1 = last.1.max(e);
+                    continue;
                 }
-                let _ = e;
             }
-            let slot_start = day_start + chrono::Duration::minutes(t - WORK_START_MIN);
-            let slot_end = day_start + chrono::Duration::minutes(gap_end - WORK_START_MIN);
-            if slot_end > slot_start {
+            merged_busy.push((s, e));
+        }
+
+        // Walk today's working window to emit free gaps
+        let mut current = window_start;
+        for (b_start, b_end) in merged_busy {
+            if current < b_start {
                 slots.push(crate::shares::models::FreeSlot {
-                    start: slot_start.and_utc().with_timezone(&chrono::Utc),
-                    end: slot_end.and_utc().with_timezone(&chrono::Utc),
+                    start: current,
+                    end: b_start,
                 });
             }
-            t = gap_end;
+            current = current.max(b_end);
         }
-        cursor += chrono::Duration::days(1);
+
+        if current < window_end {
+            slots.push(crate::shares::models::FreeSlot {
+                start: current,
+                end: window_end,
+            });
+        }
+
+        cursor += Duration::days(1);
     }
 
     slots
-}
-
-pub struct CreateShareRequest {
+}pub struct CreateShareRequest {
     pub calendar_id: Uuid,
     pub start_time: DateTime<chrono::Utc>,
     pub end_time: DateTime<chrono::Utc>,
@@ -134,6 +138,9 @@ pub struct CreateShareRequest {
     /// 09:00 to 17:00 (share-local time) in addition to the owner's real
     /// events. Recipients then only see free time outside business hours.
     pub mark_working_hours_busy: bool,
+    /// Days of the week (0=Sun … 6=Sat) the 09:00–17:00 blocks apply to.
+    /// An empty vec means every day in the range.
+    pub working_hours_days: Vec<u8>,
 }
 
 pub struct CreateShareResult {
@@ -183,6 +190,7 @@ impl<S: TokenService> ShareService<S> {
             timezone: timezone.clone(),
             visibility: visibility.as_str().to_string(),
             expires_at: req.expires_at,
+            working_hours_days: sqlx::types::Json(req.working_hours_days.clone()),
         };
 
         let share = crate::db::queries::create_share(&self.pool, &new_share)
@@ -209,7 +217,7 @@ impl<S: TokenService> ShareService<S> {
             })
             .collect();
         if req.mark_working_hours_busy {
-                for block in Self::working_hours_blocks(req.start_time, req.end_time, &timezone) {
+                for block in Self::working_hours_blocks(req.start_time, req.end_time, &timezone, &req.working_hours_days) {
                     new_events.push(NewShareEvent {
                         id: Uuid::new_v4(),
                         share_id,
@@ -237,10 +245,14 @@ impl<S: TokenService> ShareService<S> {
     /// Build one 09:00–17:00 busy block per calendar day in [start, end), in the
     /// share's timezone, as UTC instants. Days are enumerated in the local
     /// timezone so the blocks always land on the owner's calendar days.
+    ///
+    /// `working_hours_days` (0=Sun … 6=Sat) selects which days get a block.
+    /// An empty vec means every day in the range.
     fn working_hours_blocks(
         start: DateTime<chrono::Utc>,
         end: DateTime<chrono::Utc>,
         tz: &str,
+        working_hours_days: &[u8],
     ) -> Vec<CalendarEvent> {
         let tz: chrono_tz::Tz = tz.parse().unwrap_or(chrono_tz::UTC);
         let start_local = start.with_timezone(&tz);
@@ -250,23 +262,40 @@ impl<S: TokenService> ShareService<S> {
         let last = end_local.date_naive();
         let mut blocks = Vec::new();
         while cursor <= last {
-            let day_start = cursor.and_hms_opt(9, 0, 0).unwrap();
-            let day_end = cursor.and_hms_opt(17, 0, 0).unwrap();
-            // Skip the block if the working window falls entirely outside the
-            // share range (only relevant on boundary days).
-            if day_end.and_utc().with_timezone(&chrono::Utc) > start
-                && day_start.and_utc().with_timezone(&chrono::Utc) < end
-            {
-                blocks.push(CalendarEvent {
-                    provider_event_id: None,
-                    title: Some("Working hours".to_string()),
-                    start: day_start.and_utc().with_timezone(&chrono::Utc),
-                    end: day_end.and_utc().with_timezone(&chrono::Utc),
-                    timezone: Some(tz.to_string()),
-                    location: None,
-                    description: None,
-                    is_all_day: false,
-                });
+            // JS Date.getDay() and NaiveDate.weekday() disagree on numbering
+            // (weekday() is Mon=0). Map to the JS convention: Sun=0 … Sat=6.
+            let js_day = (cursor.weekday().num_days_from_monday() + 1) % 7;
+            let applies = working_hours_days.is_empty()
+                || working_hours_days.contains(&(js_day as u8));
+
+            if applies {
+                // Build the 09:00–17:00 block in the share's local timezone.
+                // `from_local_datetime` anchors the naive wall-clock time to
+                // `tz` (e.g. 09:00 EDT → 13:00 UTC), so it displays back as
+                // 09:00 to viewers in that zone. Using `.and_utc()` instead
+                // would store 09:00 UTC and render as 05:00 in Eastern.
+                let day_start = tz
+                    .from_local_datetime(&cursor.and_hms_opt(9, 0, 0).unwrap())
+                    .unwrap();
+                let day_end = tz
+                    .from_local_datetime(&cursor.and_hms_opt(17, 0, 0).unwrap())
+                    .unwrap();
+                // Skip the block if the working window falls entirely outside the
+                // share range (only relevant on boundary days).
+                if day_end.with_timezone(&chrono::Utc) > start
+                    && day_start.with_timezone(&chrono::Utc) < end
+                {
+                    blocks.push(CalendarEvent {
+                        provider_event_id: None,
+                        title: Some("Working hours".to_string()),
+                        start: day_start.with_timezone(&chrono::Utc),
+                        end: day_end.with_timezone(&chrono::Utc),
+                        timezone: Some(tz.to_string()),
+                        location: None,
+                        description: None,
+                        is_all_day: false,
+                    });
+                }
             }
             cursor += chrono::Duration::days(1);
         }
@@ -533,5 +562,72 @@ impl TokenService for RealTokenService {
         let mut hasher = Sha256::new();
         hasher.update(token.as_bytes());
         Ok(format!("{:x}", hasher.finalize()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono_tz::America;
+
+    /// The 09:00–17:00 working-hours block must be anchored to the share's
+    /// local timezone, not UTC. Storing it as a UTC naive datetime renders
+    /// as 05:00–13:00 in Eastern (and similarly offset elsewhere).
+    #[test]
+    fn working_hours_blocks_are_local_to_share_timezone() {
+        // A single day fully inside the range, in Eastern (UTC-4 in August).
+        let start = "2026-08-18T00:00:00Z"
+            .parse::<DateTime<chrono::Utc>>()
+            .unwrap();
+        let end = "2026-08-19T00:00:00Z"
+            .parse::<DateTime<chrono::Utc>>()
+            .unwrap();
+
+        let blocks = ShareService::<RealTokenService>::working_hours_blocks(
+            start, end, "America/New_York", &[],
+        );
+
+        assert_eq!(blocks.len(), 1, "one full day in range → one block");
+
+        let back_to_eastern = |dt: &DateTime<chrono::Utc>| dt.with_timezone(&America::New_York);
+
+        let s = back_to_eastern(&blocks[0].start);
+        let e = back_to_eastern(&blocks[0].end);
+
+        assert_eq!((s.hour(), s.minute()), (9, 0), "block starts at 09:00 local");
+        assert_eq!((e.hour(), e.minute()), (17, 0), "block ends at 17:00 local");
+    }
+
+    /// Free slots must be anchored to the share's local timezone too. The old
+    /// code emitted naive midnight interpreted as UTC, so a free window that
+    /// should read 00:00–09:00 in Eastern rendered as 20:00–05:00 locally.
+    #[test]
+    fn free_slots_are_local_to_share_timezone() {
+        // 2026-08-18T04:00Z == 00:00 EDT; 2026-08-19T04:00Z == 00:00 EDT the
+        // next day — a single full local day in Eastern.
+        let start = "2026-08-18T04:00:00Z".parse::<DateTime<chrono::Utc>>().unwrap();
+        let end = "2026-08-19T04:00:00Z".parse::<DateTime<chrono::Utc>>().unwrap();
+
+        // A single busy event 09:00–17:00 local Eastern leaves 00:00–09:00
+        // and 17:00–24:00 free.
+        let events = vec![crate::shares::models::PublicEvent {
+            title: Some("Work".into()),
+            start_time: "2026-08-18T13:00:00Z".parse().unwrap(), // 09:00 EDT
+            end_time: "2026-08-18T21:00:00Z".parse().unwrap(), // 17:00 EDT
+            location: None,
+            description: None,
+            is_all_day: false,
+            owner_user_id: None,
+            owner_display_name: None,
+        }];
+
+        let slots = compute_free_slots(start, end, &events, "America/New_York");
+
+        assert_eq!(slots.len(), 2, "two free gaps around the busy block");
+        let eastern = |dt: &DateTime<chrono::Utc>| dt.with_timezone(&America::New_York);
+        let s0 = eastern(&slots[0].start);
+        let e0 = eastern(&slots[0].end);
+        assert_eq!((s0.hour(), s0.minute()), (0, 0), "first free slot starts at midnight local");
+        assert_eq!((e0.hour(), e0.minute()), (9, 0), "first free slot ends at 09:00 local");
     }
 }

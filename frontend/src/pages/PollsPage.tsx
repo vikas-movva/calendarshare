@@ -172,7 +172,7 @@ export default function PollsPage() {
             placeholder="e.g. Lunch this week? (optional)"
             className="block flex-1 rounded-lg border border-border bg-field px-3 py-2 text-sm text-content focus:border-accent focus:ring-3 focus:ring-accent/20 focus:outline-none"
           />
-          <button type="submit" disabled={creating || !title.trim()} className="btn-primary px-4">
+          <button type="submit" disabled={creating || !title.trim()} className="btn-primary auto px-4">
             {creating ? 'Creating…' : 'Create'}
           </button>
         </div>
@@ -260,7 +260,7 @@ export default function PollsPage() {
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleVote(slot.id) }}
                                     disabled={voteSlot.isPending}
-                                    className="btn-primary px-3 py-1.5 text-xs"
+                                    className="btn-primary auto px-3 py-1.5 text-xs"
                                   >
                                     Vote
                                   </button>
@@ -268,7 +268,7 @@ export default function PollsPage() {
                               ) : (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setShowVoter(true) }}
-                                  className="btn-primary px-3 py-1.5 text-xs"
+                                  className="btn-primary auto px-3 py-1.5 text-xs"
                                 >
                                   Vote
                                 </button>

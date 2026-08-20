@@ -91,6 +91,10 @@ pub struct CreateShareRequest {
     /// business hours.
     #[serde(default)]
     pub mark_working_hours_busy: bool,
+    /// Days of the week (0=Sun … 6=Sat) the 09:00–17:00 blocks apply to.
+    /// An empty vec means every day in the range.
+    #[serde(default)]
+    pub working_hours_days: Vec<u8>,
 }
 
 pub async fn create_share_handler(
@@ -136,6 +140,7 @@ pub async fn create_share_handler(
                 expires_at: req.expires_at,
                 timezone,
                 mark_working_hours_busy: req.mark_working_hours_busy,
+                working_hours_days: req.working_hours_days,
             },
         )
         .await

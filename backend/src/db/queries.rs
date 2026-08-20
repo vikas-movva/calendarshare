@@ -155,8 +155,8 @@ pub async fn create_share(
     let row = sqlx::query_as::<_, crate::shares::models::Share>(
         r#"
         INSERT INTO shares
-            (id, user_id, calendar_id, token_hash, token_encrypted, start_time, end_time, timezone, visibility, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            (id, user_id, calendar_id, token_hash, token_encrypted, start_time, end_time, timezone, visibility, expires_at, working_hours_days)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
         "#,
     )
@@ -170,6 +170,7 @@ pub async fn create_share(
     .bind(&share.timezone)
     .bind(&share.visibility)
     .bind(share.expires_at)
+    .bind(&share.working_hours_days)
     .fetch_one(pool)
     .await?;
     Ok(row)
@@ -370,11 +371,10 @@ pub async fn get_display_names_by_ids(
     pool: &crate::db::PgPool,
     user_ids: &[Uuid],
 ) -> sqlx::Result<std::collections::HashMap<Uuid, Option<String>>> {
-    let rows: Vec<(Uuid, Option<String>)> = sqlx::query_as(
-        "SELECT id, display_name FROM users WHERE id = ANY($1)",
-    )
-    .bind(user_ids)
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(Uuid, Option<String>)> =
+        sqlx::query_as("SELECT id, display_name FROM users WHERE id = ANY($1)")
+            .bind(user_ids)
+            .fetch_all(pool)
+            .await?;
     Ok(rows.into_iter().collect())
 }

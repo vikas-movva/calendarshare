@@ -1,10 +1,13 @@
 import { useParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { Calendar, dayStart } from '../components/react-modular-calender'
+import type { CalendarEvent as MCCalendarEvent } from '../components/react-modular-calender'
 import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot, useMe, useCalendars, useAddContributor } from '../hooks/queries'
 import type { PublicEvent, PollSlot } from '../types/api'
 import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, SunSmall, PollSmall, ClockSmall, UsersSmall, XSmall, CheckSmall, PlusSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
 import { stagger, slideRight } from '../theme/anim'
+import { DateTime } from 'luxon'
 
 type View = 'list' | 'calendar' | 'free'
 
@@ -18,7 +21,7 @@ function formatEventTime(iso: string, isAllDay?: boolean): string {
   return `${date} · ${time}`
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: Date | string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
@@ -26,179 +29,21 @@ function formatRange(start: string, end: string): string {
   return `${formatTime(start)} – ${formatTime(end)}`
 }
 
-function minutesOfDay(iso: string): number {
-  const d = new Date(iso)
-  return d.getUTCHours() * 60 + d.getUTCMinutes()
-}
-
-function layoutDay(events: PublicEvent[]) {
-  type PlacedEvent = {
-    ev: PublicEvent
-    top: number
-    height: number
-    lane: number
-    totalLanes: number
+/**
+ * Convert a modular-calendar event back into the page's PublicEvent shape so
+ * the existing event-detail modal can keep rendering unchanged.
+ */
+function toPublicEvent(ev: MCCalendarEvent): PublicEvent {
+  return {
+    title: ev.title || null,
+    start_time: ev.start.toISOString(),
+    end_time: ev.end.toISOString(),
+    location: ev.location ?? null,
+    description: ev.description ?? null,
+    is_all_day: ev.isAllDay,
+    owner_user_id: null,
+    owner_display_name: null,
   }
-
-  const timed = events.filter((e) => !e.is_all_day)
-
-  if (timed.length === 0) {
-    return [] as PlacedEvent[]
-  }
-
-  const getStart = (ev: PublicEvent) =>
-    minutesOfDay(ev.start_time)
-
-  const getEnd = (ev: PublicEvent) => {
-    const start = getStart(ev)
-    const end = minutesOfDay(ev.end_time)
-
-    // Prevent malformed events from having an end before their start.
-    return Math.max(end, start)
-  }
-
-  const startMin = Math.min(...timed.map(getStart))
-  const endMin = Math.max(...timed.map(getEnd))
-  const windowMin = Math.max(endMin - startMin, 30)
-
-  const sorted = [...timed].sort((a, b) => {
-    const startDiff = getStart(a) - getStart(b)
-
-    if (startDiff !== 0) {
-      return startDiff
-    }
-
-    // For identical starts, longer events come first.
-    return getEnd(b) - getEnd(a)
-  })
-
-  /*
-   * ------------------------------------------------------------
-   * Phase 1: Build overlap groups
-   * ------------------------------------------------------------
-   *
-   * Each group contains events that are connected through
-   * overlapping events.
-   *
-   * Example:
-   *
-   * A: 09 ───────── 12
-   * B:    10 ─ 11
-   * C:          11 ───── 13
-   *
-   * A, B, and C are one group.
-   *
-   * D: 14 ─ 15
-   *
-   * D is a separate group.
-   */
-  const eventGroup = new Map<PublicEvent, number>()
-
-  let currentGroup = 0
-  let currentGroupEnd = -Infinity
-
-  for (const ev of sorted) {
-    const start = getStart(ev)
-    const end = getEnd(ev)
-
-    if (start > currentGroupEnd) {
-      if (eventGroup.size > 0) {
-        currentGroup++
-      }
-
-      currentGroupEnd = end
-    } else {
-      currentGroupEnd = Math.max(currentGroupEnd, end)
-    }
-
-    eventGroup.set(ev, currentGroup)
-  }
-
-  /*
-   * ------------------------------------------------------------
-   * Phase 2: Assign lanes within each group
-   * ------------------------------------------------------------
-   */
-  const groups = new Map<number, PublicEvent[]>()
-
-  for (const ev of sorted) {
-    const group = eventGroup.get(ev)!
-
-    const groupEvents = groups.get(group)
-
-    if (groupEvents) {
-      groupEvents.push(ev)
-    } else {
-      groups.set(group, [ev])
-    }
-  }
-
-  const placed: PlacedEvent[] = []
-
-  for (const [group, groupEvents] of groups) {
-    const laneEnd: number[] = []
-
-    for (const ev of groupEvents) {
-      const start = getStart(ev)
-      const end = getEnd(ev)
-
-      /*
-       * Reuse the first lane whose previous event has ended.
-       *
-       * <= is correct because:
-       *
-       * A: 09:00 - 10:00
-       * B: 10:00 - 11:00
-       *
-       * do not overlap.
-       */
-      let lane = laneEnd.findIndex(
-        (existingEnd) => existingEnd <= start,
-      )
-
-      if (lane === -1) {
-        lane = laneEnd.length
-        laneEnd.push(end)
-      } else {
-        laneEnd[lane] = end
-      }
-
-      const top = (start - startMin) / windowMin
-
-      const height = Math.max(
-        (end - start) / windowMin,
-        0.05,
-      )
-
-      placed.push({
-        ev,
-        top,
-        height,
-        lane,
-        // Filled in after all lanes in this group are known.
-        totalLanes: 0,
-      })
-    }
-
-    /*
-     * Number of lanes required by THIS overlap group.
-     */
-    const totalLanes = laneEnd.length
-
-    for (const placedEvent of placed) {
-      if (eventGroup.get(placedEvent.ev) === group) {
-        placedEvent.totalLanes = totalLanes
-      }
-    }
-  }
-
-  /*
-   * Return events chronologically.
-   */
-  return placed.sort(
-    (a, b) =>
-      getStart(a.ev) - getStart(b.ev),
-  )
 }
 
 function tzParts(d: Date, tz: string): { y: number; m: number; day: number } {
@@ -219,30 +64,11 @@ function dayKeyInTz(iso: string, tz: string): string {
   return `${y}-${mm}-${dd}`
 }
 
-// Enumerate the calendar days in the share's range as UTC-midnight Dates,
-// derived from the share timezone so the grid matches the owner's calendar
-// regardless of the viewer's browser timezone.
-function buildCalendarDays(start: Date, end: Date, tz: string) {
-  const a = tzParts(start, tz)
-  const b = tzParts(end, tz)
-  const days: Date[] = []
-  const cursor = new Date(Date.UTC(a.y, a.m, a.day))
-  const last = new Date(Date.UTC(b.y, b.m, b.day))
-  while (cursor <= last) {
-    days.push(new Date(cursor))
-    cursor.setUTCDate(cursor.getUTCDate() + 1)
-  }
-  return days
-}
-
-function dayKey(d: Date): string {
-  const m = `${d.getUTCMonth() + 1}`.padStart(2, '0')
-  const day = `${d.getUTCDate()}`.padStart(2, '0')
-  return `${d.getUTCFullYear()}-${m}-${day}`
-}
-
-function sameDayInTz(iso: string, day: Date, tz: string): boolean {
-  return dayKeyInTz(iso, tz) === dayKey(day)
+function allDayBoundary(iso: string, timezone: string): Date {
+  const date = DateTime.fromISO(iso, { zone: 'utc' }).toISODate()
+  return date
+    ? DateTime.fromISO(date, { zone: timezone }).startOf('day').toJSDate()
+    : new Date(iso)
 }
 
 function dayLabel(iso: string, tz: string): string {
@@ -255,6 +81,20 @@ function groupSlotsByDay(slots: { start: string; end: string }[], tz: string) {
     const key = dayKeyInTz(slot.start, tz)
     const arr = grouped.get(key) ?? []
     arr.push(slot)
+    grouped.set(key, arr)
+  }
+  return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+}
+
+// Group events by their calendar day in the share's timezone. Events are
+// already ordered by start time from the backend, so each day's entries stay
+// vertically sorted without an extra pass.
+function groupEventsByDay(events: PublicEvent[], tz: string) {
+  const grouped = new Map<string, PublicEvent[]>()
+  for (const ev of events) {
+    const key = dayKeyInTz(ev.start_time, tz)
+    const arr = grouped.get(key) ?? []
+    arr.push(ev)
     grouped.set(key, arr)
   }
   return [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]))
@@ -411,6 +251,22 @@ export default function PublicSharePage() {
     }
   }
 
+  const calendarEvents = useMemo<MCCalendarEvent[]>(
+    () =>
+      (data?.events ?? []).map((ev) => ({
+        id: `${ev.owner_user_id ?? 'share'}-${ev.start_time}`,
+        calendarId: ev.owner_user_id ?? 'share',
+        title: ev.title ?? '',
+        start: ev.is_all_day ? allDayBoundary(ev.start_time, data?.timezone ?? 'UTC') : new Date(ev.start_time),
+        end: ev.is_all_day ? allDayBoundary(ev.end_time, data?.timezone ?? 'UTC') : new Date(ev.end_time),
+        isAllDay: ev.is_all_day,
+        color: undefined,
+        location: ev.location ?? undefined,
+        description: ev.description ?? undefined,
+      })),
+    [data?.events],
+  )
+
   if (isLoading) {
     return <div className="card p-8 text-center text-content-muted">Loading…</div>
   }
@@ -429,7 +285,8 @@ export default function PublicSharePage() {
     )
   }
 
-  const days = buildCalendarDays(new Date(data.range.start), new Date(data.range.end), data.timezone)
+  const rangeStart = dayStart(new Date(data.range.start), data.timezone)
+  const rangeEnd = dayStart(new Date(data.range.end), data.timezone)
   const freeSlots = freeData?.slots ?? []
   const polls = data.polls ?? []
 
@@ -491,21 +348,21 @@ export default function PublicSharePage() {
       </AnimatePresence>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card mb-6 p-5">
-        <div className="flex items-center gap-2.5 border-b border-border bg-accent/5 px-5 py-4">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent/10 text-accent">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-3 border-b border-border bg-accent/5 px-5 py-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
             <CalendarSmall />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="font-semibold text-content">
+            <h2 className="truncate font-semibold text-content">
               {data.owner.display_name || "Calendar"}'s schedule
             </h2>
-            <p className="text-xs text-content-faint">
+            <p className="truncate text-xs text-content-faint">
               {new Date(data.range.start).toLocaleDateString([], { month: 'long', day: 'numeric' })} –{' '}
               {new Date(data.range.end).toLocaleDateString([], { month: 'long', day: 'numeric' })}{' '}
               · {data.timezone}
             </p>
           </div>
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
             {canAddCalendar && (
               <button
                 onClick={() => setShowAddCalendar(true)}
@@ -526,124 +383,74 @@ export default function PublicSharePage() {
               variants={stagger}
               initial="hidden"
               animate="visible"
-              className="divide-y divide-border"
+              className="max-h-[60vh] overflow-y-auto divide-y divide-border"
             >
-              {data.events.map((ev, i) => (
-                <motion.div key={i} variants={slideRight} className="flex gap-3 px-5 py-3.5">
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate font-medium text-content">{ev.title || '(busy)'}</p>
-                      <span className="shrink-0 text-xs text-content-faint">
-                        {formatEventTime(ev.start_time, ev.is_all_day)} – {formatEventTime(ev.end_time, ev.is_all_day)}
-                      </span>
-                    </div>
-                    {ev.owner_display_name && (
-                      <span className="mt-0.5 text-xs text-content-faint flex items-center gap-1">
-                        <UsersSmall /> {ev.owner_display_name}
-                      </span>
-                    )}
-                    {ev.location && (
-                      <p className="truncate text-sm text-content-muted">📍 {ev.location}</p>
-                    )}
-                    {ev.description && (
-                      <p className="truncate text-sm text-content-muted">{ev.description}</p>
-                    )}
-                  </div>
-                </motion.div>
+              {groupEventsByDay(data.events, data.timezone).map(([day, dayEvents]) => (
+                <div key={day} className="px-5 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-content-faint">
+                    {dayLabel(dayEvents[0].start_time, data.timezone)}
+                  </p>
+                  <ul className="mt-2 space-y-2.5">
+                    {dayEvents.map((ev, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                            <p className="truncate font-medium text-content">{ev.title || '(busy)'}</p>
+                            <span className="shrink-0 text-xs text-content-faint">
+                              {formatEventTime(ev.start_time, ev.is_all_day)} – {formatEventTime(ev.end_time, ev.is_all_day)}
+                            </span>
+                          </div>
+                          {ev.owner_display_name && (
+                            <span className="mt-0.5 text-xs text-content-faint flex items-center gap-1">
+                              <UsersSmall /> {ev.owner_display_name}
+                            </span>
+                          )}
+                          {ev.location && (
+                            <p className="truncate text-sm text-content-muted">📍 {ev.location}</p>
+                          )}
+                          {ev.description && (
+                            <p className="truncate text-sm text-content-muted">{ev.description}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
               {data.events.length === 0 && (
                 <p className="px-5 py-8 text-center text-content-muted">No events in this timeframe.</p>
               )}
             </motion.div>
-          ) : view === 'calendar' ? (
-            <div key="calendar" className="grid grid-cols-7 gap-px overflow-hidden bg-border text-xs">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} className="bg-surface px-2 py-1.5 text-center text-xs font-medium text-content-faint">
-                  {d}
-                </div>
-              ))}
-              {days.map((day) => {
-                const key = dayKey(day)
-                const dayEvents = data.events.filter((ev) => sameDayInTz(ev.start_time, day, data.timezone))
-                const allDay = dayEvents.filter((ev) => ev.is_all_day)
-                const positioned = layoutDay(dayEvents)
+) : view === 'calendar' ? (
+            <Calendar
+              key="calendar"
+              events={calendarEvents}
+              startDate={rangeStart}
+              endDate={rangeEnd}
+              timezone={data.timezone}
+              slotMinutes={60}
+              onEventClick={(ev) => setSelected(toPublicEvent(ev))}
+              renderEvent={({ event, layout }) => {
+                if (layout.kind === 'all-day') {
+                  return (
+                    <span className="chip chip-accent">
+                      All day{event.title ? ` · ${event.title}` : ''}
+                    </span>
+                  )
+                }
                 return (
-                  <div key={key} className="aspect-square min-h-0 bg-surface p-1.5">
-                    <div className="flex h-full flex-col">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-content-muted">{day.getUTCDate()}</span>
-                      </div>
-                      <div className="mt-1 flex-1 overflow-hidden">
-{allDay.length > 0 && (
-                            <div className="space-y-1">
-                              {allDay.slice(0, 2).map((ev, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => setSelected(ev)}
-                                  className="w-full truncate rounded-md bg-accent/10 px-1 py-0.5 text-[10px] text-accent hover:bg-accent/25 min-h-[16px]"
-                                  title="All day"
-                                >
-                                  All day{ev.title ? ` · ${ev.title}` : ''}
-                                  {ev.owner_display_name ? ` · ${ev.owner_display_name}` : ''}
-                                </button>
-                              ))}
-                              {allDay.length > 2 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelected(allDay[0])}
-                                  className="px-1 text-[10px] text-content-faint hover:text-content"
-                                >
-                                  +{allDay.length - 2} more
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        {positioned.length > 0 && (
-                          <div className="relative flex-1 overflow-visible">
-                            {positioned.map((p, i) => {
-                              const widthPct = 100 / p.totalLanes
-                              const leftPct = p.lane * widthPct
-                              return (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => setSelected(p.ev)}
-                                  className="absolute flex items-center gap-1 overflow-hidden rounded-md bg-accent/10 px-1.5 py-1.5 text-[11px] leading-snug text-accent hover:bg-accent/25"
-                                  style={{
-                                    top: `${p.top * 100}%`,
-                                    height: `${p.height * 100}%`,
-                                    minHeight: '32px',
-                                    left: `${leftPct}%`,
-                                    width: `calc(${widthPct}% - 4px)`,
-                                  }}
-                                  title={`${formatTime(p.ev.start_time)} – ${formatTime(p.ev.end_time)}${p.ev.title ? ` · ${p.ev.title}` : ''}${p.ev.owner_display_name ? ` · ${p.ev.owner_display_name}` : ''}`}
-                                >
-                                  <span className="text-xs text-content-faint">{formatTime(p.ev.start_time).slice(0, -2)}</span>
-                                  {p.ev.title && <span className="truncate">{p.ev.title}</span>}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                        {dayEvents.length > positioned.length + allDay.length && (
-                          <button
-                            type="button"
-                            onClick={() => setSelected(dayEvents[0])}
-                            className="mt-1 px-1 text-[10px] text-content-faint hover:text-content"
-                          >
-                            +{dayEvents.length - positioned.length - allDay.length} more
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <span className="flex items-center gap-1 truncate">
+                    <span className="text-content-faint">
+                      {formatTime(event.start).slice(0, -2)}
+                    </span>
+                    {event.title && <span className="truncate">{event.title}</span>}
+                  </span>
                 )
-              })}
-            </div>
+              }}
+            />
           ) : (
-            <div key="free" className="divide-y divide-border">
+            <div key="free" className="max-h-[60vh] overflow-y-auto divide-y divide-border">
               {freeLoading && (
                 <p className="px-5 py-8 text-center text-content-muted">Loading free times…</p>
               )}
@@ -749,7 +556,7 @@ export default function PublicSharePage() {
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleVote(slot.id) }}
                                       disabled={voteSlot.isPending}
-                                      className="btn-primary px-3 py-1.5 text-xs"
+                                      className="btn-primary auto px-3 py-1.5 text-xs"
                                     >
                                       Vote
                                     </button>
@@ -757,7 +564,7 @@ export default function PublicSharePage() {
                                 ) : (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setShowVoter(true) }}
-                                    className="btn-primary px-3 py-1.5 text-xs"
+                                    className="btn-primary auto px-3 py-1.5 text-xs"
                                   >
                                     Vote
                                   </button>

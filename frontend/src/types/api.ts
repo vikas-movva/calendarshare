@@ -29,6 +29,7 @@ export interface CreateShareRequest {
   expires_at: string | null;
   timezone?: string;
   mark_working_hours_busy?: boolean;
+  working_hours_days?: number[];
 }
 
 export interface CreateShareResponse {

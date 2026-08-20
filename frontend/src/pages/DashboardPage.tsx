@@ -5,7 +5,7 @@ import { fadeUp, stagger } from '../theme/anim'
 
 export default function DashboardPage() {
   const { data: user } = useMe()
-  const { data: calendars, isLoading: calLoading } = useCalendars()
+  const { data: calendars, error: calendarsError, isLoading: calLoading } = useCalendars()
   const { data: shares, isLoading: sharesLoading } = useShares()
 
   const activeShares = (shares?.shares || []).filter((s) => !s.revoked_at)
@@ -39,7 +39,14 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {calLoading ? (
+          {calendarsError ? (
+            <div className="w-full rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-300">
+              <p>Your session is active, but Google Calendar is not connected.</p>
+              <a href="/auth/login" className="mt-2 inline-block font-semibold underline underline-offset-2 hover:text-amber-200">
+                Reconnect Google Calendar
+              </a>
+            </div>
+          ) : calLoading ? (
             <p className="text-sm text-content-muted">Loading…</p>
           ) : (calendars?.calendars || []).length === 0 ? (
             <p className="text-sm text-content-muted">No calendars connected yet.</p>

@@ -45,4 +45,9 @@ export default {
     },
   },
   plugins: [],
+  safelist: [
+    // chip variants are referenced dynamically (e.g. all-day events in the
+    // calendar view) so keep them from being purged.
+    { pattern: /chip-/ },
+  ],
 }

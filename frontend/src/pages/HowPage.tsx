@@ -24,10 +24,10 @@ const STEPS = [
   {
     number: '03',
     icon: <UsersSmall />,
-    title: 'Decide what they see',
+    title: 'How many details are you sharing?',
     description:
       'Three simple options: show only busy/free times, show the event names too, or show everything including location and notes. The choice is always yours.',
-    bullets: ['Busy / Free — just the times', 'Title + Time — names and when', 'Full Details — everything'],
+    bullets: ['Minimal — just the times', 'Basic — names and when', 'Full — All the details'],
   },
   {
     number: '04',
@@ -135,7 +135,7 @@ export default function HowPage() {
               Connect your calendar, pick a date range, and send a safe link.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 sm:justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <Link to="/shares/new" className="btn-primary">Create share</Link>
             <Link to="/" className="btn-ghost">Back to home</Link>
           </div>

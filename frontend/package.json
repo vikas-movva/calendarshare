@@ -13,20 +13,23 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@modular-calendar/core": "file:../react-modular-calender",
     "@tanstack/react-query": "^5.66.0",
     "clsx": "^2.1.1",
-    "framer-motion": "^11.11.0",
+    "framer-motion": "^13.1.0",
+    "luxon": "^3.7.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.9.1",
+    "@eslint/js": "^9.18.0",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^14.3.1",
+    "@types/luxon": "^3.7.4",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.4",
-    "@eslint/js": "^9.18.0",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "@vitejs/plugin-react": "^4.3.0",

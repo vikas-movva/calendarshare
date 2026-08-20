@@ -6,9 +6,9 @@ import { motion } from 'framer-motion'
 import { fadeUp, stagger } from '../theme/anim'
 
 const VISIBILITY_OPTIONS = [
-  { value: 'busy', label: 'Busy / Free', description: 'Only start and end times' },
-  { value: 'title_time', label: 'Title + Time', description: 'Event title plus start and end' },
-  { value: 'details', label: 'Details', description: 'Title, time, location, and description' },
+  { value: 'busy', label: 'Minimal', description: 'Only start and end times' },
+  { value: 'title_time', label: 'Basic', description: 'Event title plus start and end' },
+  { value: 'details', label: 'Full', description: 'Title, time, location, and description' },
 ] as const
 
 const EXPIRATION_OPTIONS = [
@@ -16,6 +16,16 @@ const EXPIRATION_OPTIONS = [
   { value: '1d', label: '1 day', ms: 24 * 60 * 60 * 1000 },
   { value: '7d', label: '7 days', ms: 7 * 24 * 60 * 60 * 1000 },
   { value: 'never', label: 'Never', ms: null },
+] as const
+
+const WEEKDAYS = [
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
 ] as const
 
 // Build the start of a chosen "YYYY-MM-DD" as local midnight (00:00:00) in
@@ -85,6 +95,7 @@ export default function NewSharePage() {
   const [visibility, setVisibility] = useState<'busy' | 'title_time' | 'details'>('title_time')
   const [expiration, setExpiration] = useState('7d')
   const [markWorkingHours, setMarkWorkingHours] = useState(false)
+  const [workingHoursDays, setWorkingHoursDays] = useState<number[]>([])
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ url: string; id: string } | null>(null)
   const [pollTitle, setPollTitle] = useState('')
@@ -122,6 +133,7 @@ export default function NewSharePage() {
         expires_at,
         timezone: selectedCalendar?.timezone || undefined,
         mark_working_hours_busy: markWorkingHours,
+        working_hours_days: markWorkingHours ? workingHoursDays : [],
       })
       setResult({ url: res.url, id: res.id })
     } catch (err) {
@@ -240,9 +252,11 @@ export default function NewSharePage() {
           <motion.div variants={fadeUp}>
             <label className="section-title">Step 1 · Calendar</label>
             <select
+              id="share-calendar"
+              aria-label="Calendar"
               value={calendarId}
               onChange={(e) => setCalendarId(e.target.value)}
-              className="mt-2 block w-full rounded-lg border border-border bg-field px-3 py-2.5 text-sm text-content focus:border-accent focus:ring-3 focus:ring-accent/20 focus:outline-none"
+              className="form-select mt-2 block min-h-11 min-w-0 w-full max-w-full touch-manipulation rounded-lg border border-border bg-field px-3 py-2.5 text-sm text-content focus:border-accent focus:ring-3 focus:ring-accent/20 focus:outline-none"
             >
               <option value="">Select a calendar…</option>
               {calendarsList.map((c) => (
@@ -313,16 +327,50 @@ export default function NewSharePage() {
               <input
                 type="checkbox"
                 checked={markWorkingHours}
-                onChange={(e) => setMarkWorkingHours(e.target.checked)}
+                onChange={(e) => {
+                  setMarkWorkingHours(e.target.checked)
+                  if (!e.target.checked) setWorkingHoursDays([])
+                }}
                 className="mt-0.5 h-4 w-4 accent-accent"
               />
               <span>
                 <span className="block text-sm font-medium text-content">Mark 9am–5pm as busy</span>
                 <span className="block text-xs text-content-muted">
-                  Every day in the range is treated as busy from 09:00 to 17:00 in your calendar's timezone. Recipients only see free time outside business hours.
+                  Recipients only see free time outside business hours.
                 </span>
               </span>
             </label>
+            {markWorkingHours && (
+              <div className="mt-3 rounded-lg border border-border p-3">
+                <p className="text-xs text-content-faint">
+                  Apply to these days of the week. Leave all unchecked to mark every day in the range.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {WEEKDAYS.map((d) => {
+                    const on = workingHoursDays.includes(d.value)
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() =>
+                          setWorkingHoursDays((prev) =>
+                            on ? prev.filter((x) => x !== d.value) : [...prev, d.value].sort((a, b) => a - b)
+                          )
+                        }
+                        className={`min-w-[2.5rem] rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                          on
+                            ? 'bg-accent text-on-accent'
+                            : 'border border-border text-content-muted hover:bg-card'
+                        }`}
+                        aria-pressed={on}
+                      >
+                        {d.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </motion.div>
 
           <motion.div variants={fadeUp}>

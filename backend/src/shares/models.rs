@@ -104,6 +104,13 @@ pub struct Share {
     pub expires_at: Option<DateTime<chrono::Utc>>,
     pub revoked_at: Option<DateTime<chrono::Utc>>,
     pub created_at: DateTime<chrono::Utc>,
+    /// Days of the week (0=Sun … 6=Sat) the 09:00–17:00 working-hours
+    /// blocks apply to. An empty array means every day in the range.
+    ///
+    /// Optional: older rows predate this column and store NULL, so decode as
+    /// `Option` rather than failing the whole share list with a 500.
+    #[serde(default)]
+    pub working_hours_days: Option<sqlx::types::Json<Vec<u8>>>,
 }
 
 impl Share {
@@ -139,6 +146,7 @@ pub struct NewShare {
     pub timezone: String,
     pub visibility: String,
     pub expires_at: Option<DateTime<chrono::Utc>>,
+    pub working_hours_days: sqlx::types::Json<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
