@@ -9,6 +9,7 @@ async fn setup_pool() -> sqlx::PgPool {
 }
 
 #[tokio::test]
+#[ignore = " This test requires a database connection and is not suitable for CI/CD environments."]
 async fn public_share_flow_roundtrip() {
     let pool = setup_pool().await;
 

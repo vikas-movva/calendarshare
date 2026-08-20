@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useListPolls, useCreatePoll, useVoteSlot, useUnvoteSlot, useMe } from '../hooks/queries'
 import { PollSmall, ArrowLeftSmall, CheckSmall, UsersSmall, ClockSmall, PlusSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
-import { stagger, slideRight } from '../theme/anim'
+import { stagger, slideRight, popIn, EASE_SNAPPY } from '../theme/anim'
 
 const VOTER_KEY = 'calshare.voter'
 
@@ -315,14 +315,15 @@ export default function PollsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: EASE_SNAPPY }}
             onClick={() => setShowVoter(false)}
           >
             <motion.div
               className="card w-full max-w-sm overflow-hidden p-5"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              variants={popIn}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-2">

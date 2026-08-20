@@ -5,22 +5,24 @@ import ThemeControls from '../components/ThemeControls'
 import { Logo } from '../components/Logo'
 import { LogOutSmall, LogInSmall, ShareSmall, GithubSmall, TwitterSmall, LinkedInSmall, CalendarGridSmall} from '../components/Icons'
 import { useState } from 'react'
+import { EASE_SNAPPY } from '../theme/anim'
 
 function PageTransition() {
   const location = useLocation()
 
   const variants: Variants = {
-    initial: { opacity: 0, x: 48 },
-    animate: { opacity: 1, x: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+    enter: { opacity: 0, y: 8 },
+    center: { opacity: 1, y: 0, transition: { duration: 0.2, ease: EASE_SNAPPY } },
+    exit: { opacity: 0, y: -6, transition: { duration: 0.12, ease: 'easeIn' } },
   }
 
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence initial={false} mode="wait">
       <motion.div
         key={location.pathname}
         variants={variants}
-        initial="initial"
-        animate="animate"
+        initial="enter"
+        animate="center"
         className="min-h-[calc(100vh-120px)]"
       >
         <Outlet />
@@ -147,7 +149,7 @@ export default function AppLayout() {
 
         <p className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
           <a
-            href="https://github.com/vikas-movva/CalenderShare"
+            href="https://github.com/vikas-movva/calendarshare"
             target="_blank"
             rel="noopener"
             aria-label="GitHub repository"

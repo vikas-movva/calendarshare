@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useMe } from '../hooks/queries'
 import { CalendarSmall } from '../components/Icons'
 import { motion, useReducedMotion } from 'framer-motion'
+import { EASE_SNAPPY } from '../theme/anim'
 
 export default function LandingPage() {
   const { data: user } = useMe()
@@ -49,9 +50,9 @@ export default function LandingPage() {
           </div>
 
           <motion.div
-            initial={{ opacity: 0, y: 32 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.26, delay: 0.1, ease: EASE_SNAPPY }}
             className="relative mx-auto w-full max-w-md"
           >
             <div className="relative rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-5 shadow-2xl">
@@ -82,9 +83,9 @@ export default function LandingPage() {
                 ].map(([title, time, color], i) => (
                   <motion.div
                     key={title}
-                    initial={{ opacity: 0, x: -12 }}
+                    initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.45, delay: 0.5 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.2, delay: 0.18 + i * 0.06, ease: EASE_SNAPPY }}
                     className="flex items-center gap-3 py-2.5"
                   >
                     <motion.span

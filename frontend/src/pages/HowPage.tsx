@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
-import { fadeUp, stagger, slideRight, inViewOnce } from '../theme/anim'
+import { fadeUp, stagger, slideRight, inViewOnce, EASE_SNAPPY } from '../theme/anim'
 import { CalendarSmall, UsersSmall, ShieldSmall, ClockSmall, ArrowLeftSmall, CheckSmall, PlusSmall } from '../components/Icons'
 
 const STEPS = [
@@ -161,7 +161,7 @@ function FaqItem({ item }: { item: { q: string; a: string } }) {
         {item.q}
         <motion.span
           animate={{ rotate: open ? 45 : 0 }}
-          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.18, ease: EASE_SNAPPY }}
           className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-accent/10 text-accent"
         >
           <PlusSmall />
@@ -173,7 +173,7 @@ function FaqItem({ item }: { item: { q: string; a: string } }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.22, ease: EASE_SNAPPY }}
           >
             <div className="px-5 pb-4 text-sm text-content-muted">
               {item.a}

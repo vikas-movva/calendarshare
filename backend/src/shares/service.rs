@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, TimeZone, Timelike, Duration, LocalResult, NaiveDateTime, Utc};
+use chrono::{DateTime, Datelike, Duration, LocalResult, NaiveDateTime, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -51,7 +51,8 @@ pub fn compute_free_slots(
 
     let range_start_day = range_start_local.date_naive();
     // Prevent an extra zero-length day iteration if range_end falls exactly on local midnight
-    let range_end_day = if range_end_local.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+    let range_end_day = if range_end_local.time()
+        == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
         && range_end_local > range_start_local
     {
         (range_end_local - Duration::milliseconds(1)).date_naive()
@@ -127,7 +128,8 @@ pub fn compute_free_slots(
     }
 
     slots
-}pub struct CreateShareRequest {
+}
+pub struct CreateShareRequest {
     pub calendar_id: Uuid,
     pub start_time: DateTime<chrono::Utc>,
     pub end_time: DateTime<chrono::Utc>,
@@ -217,21 +219,26 @@ impl<S: TokenService> ShareService<S> {
             })
             .collect();
         if req.mark_working_hours_busy {
-                for block in Self::working_hours_blocks(req.start_time, req.end_time, &timezone, &req.working_hours_days) {
-                    new_events.push(NewShareEvent {
-                        id: Uuid::new_v4(),
-                        share_id,
-                        provider_event_id: Some(format!("working-hours-{}", block.start.to_rfc3339())),
-                        title: Some("Working hours".to_string()),
-                        start_time: block.start,
-                        end_time: block.end,
-                        location: None,
-                        description: None,
-                        is_all_day: false,
-                        owner_user_id: Some(user_id),
-                    });
-                }
+            for block in Self::working_hours_blocks(
+                req.start_time,
+                req.end_time,
+                &timezone,
+                &req.working_hours_days,
+            ) {
+                new_events.push(NewShareEvent {
+                    id: Uuid::new_v4(),
+                    share_id,
+                    provider_event_id: Some(format!("working-hours-{}", block.start.to_rfc3339())),
+                    title: Some("Working hours".to_string()),
+                    start_time: block.start,
+                    end_time: block.end,
+                    location: None,
+                    description: None,
+                    is_all_day: false,
+                    owner_user_id: Some(user_id),
+                });
             }
+        }
 
         crate::db::queries::create_share_events(&self.pool, &new_events)
             .await
@@ -265,8 +272,8 @@ impl<S: TokenService> ShareService<S> {
             // JS Date.getDay() and NaiveDate.weekday() disagree on numbering
             // (weekday() is Mon=0). Map to the JS convention: Sun=0 … Sat=6.
             let js_day = (cursor.weekday().num_days_from_monday() + 1) % 7;
-            let applies = working_hours_days.is_empty()
-                || working_hours_days.contains(&(js_day as u8));
+            let applies =
+                working_hours_days.is_empty() || working_hours_days.contains(&(js_day as u8));
 
             if applies {
                 // Build the 09:00–17:00 block in the share's local timezone.
@@ -357,10 +364,7 @@ impl<S: TokenService> ShareService<S> {
         share: &crate::shares::models::Share,
         events: &[crate::shares::models::ShareEvent],
     ) -> Result<Vec<PublicEvent>, String> {
-        let owner_ids: Vec<Uuid> = events
-            .iter()
-            .filter_map(|e| e.owner_user_id)
-            .collect();
+        let owner_ids: Vec<Uuid> = events.iter().filter_map(|e| e.owner_user_id).collect();
         let names: HashMap<Uuid, Option<String>> =
             crate::db::queries::get_display_names_by_ids(&self.pool, &owner_ids)
                 .await
@@ -584,7 +588,10 @@ mod tests {
             .unwrap();
 
         let blocks = ShareService::<RealTokenService>::working_hours_blocks(
-            start, end, "America/New_York", &[],
+            start,
+            end,
+            "America/New_York",
+            &[],
         );
 
         assert_eq!(blocks.len(), 1, "one full day in range → one block");
@@ -594,7 +601,11 @@ mod tests {
         let s = back_to_eastern(&blocks[0].start);
         let e = back_to_eastern(&blocks[0].end);
 
-        assert_eq!((s.hour(), s.minute()), (9, 0), "block starts at 09:00 local");
+        assert_eq!(
+            (s.hour(), s.minute()),
+            (9, 0),
+            "block starts at 09:00 local"
+        );
         assert_eq!((e.hour(), e.minute()), (17, 0), "block ends at 17:00 local");
     }
 
@@ -605,15 +616,19 @@ mod tests {
     fn free_slots_are_local_to_share_timezone() {
         // 2026-08-18T04:00Z == 00:00 EDT; 2026-08-19T04:00Z == 00:00 EDT the
         // next day — a single full local day in Eastern.
-        let start = "2026-08-18T04:00:00Z".parse::<DateTime<chrono::Utc>>().unwrap();
-        let end = "2026-08-19T04:00:00Z".parse::<DateTime<chrono::Utc>>().unwrap();
+        let start = "2026-08-18T04:00:00Z"
+            .parse::<DateTime<chrono::Utc>>()
+            .unwrap();
+        let end = "2026-08-19T04:00:00Z"
+            .parse::<DateTime<chrono::Utc>>()
+            .unwrap();
 
         // A single busy event 09:00–17:00 local Eastern leaves 00:00–09:00
         // and 17:00–24:00 free.
         let events = vec![crate::shares::models::PublicEvent {
             title: Some("Work".into()),
             start_time: "2026-08-18T13:00:00Z".parse().unwrap(), // 09:00 EDT
-            end_time: "2026-08-18T21:00:00Z".parse().unwrap(), // 17:00 EDT
+            end_time: "2026-08-18T21:00:00Z".parse().unwrap(),   // 17:00 EDT
             location: None,
             description: None,
             is_all_day: false,
@@ -627,7 +642,15 @@ mod tests {
         let eastern = |dt: &DateTime<chrono::Utc>| dt.with_timezone(&America::New_York);
         let s0 = eastern(&slots[0].start);
         let e0 = eastern(&slots[0].end);
-        assert_eq!((s0.hour(), s0.minute()), (0, 0), "first free slot starts at midnight local");
-        assert_eq!((e0.hour(), e0.minute()), (9, 0), "first free slot ends at 09:00 local");
+        assert_eq!(
+            (s0.hour(), s0.minute()),
+            (0, 0),
+            "first free slot starts at midnight local"
+        );
+        assert_eq!(
+            (e0.hour(), e0.minute()),
+            (9, 0),
+            "first free slot ends at 09:00 local"
+        );
     }
 }

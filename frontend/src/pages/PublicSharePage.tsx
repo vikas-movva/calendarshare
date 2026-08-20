@@ -1,12 +1,12 @@
 import { useParams } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
-import { Calendar, dayStart } from '../components/react-modular-calender'
-import type { CalendarEvent as MCCalendarEvent } from '../components/react-modular-calender'
+import { Calendar, dayStart } from '../components/react-modular-calendar'
+import type { CalendarEvent as MCCalendarEvent } from '../components/react-modular-calendar'
 import { usePublicShare, usePublicFreeSlots, useVoteSlot, useUnvoteSlot, useMe, useCalendars, useAddContributor } from '../hooks/queries'
 import type { PublicEvent, PollSlot } from '../types/api'
 import { CalendarSmall, EyeSmall, ListSmall, CalendarGridSmall, SunSmall, PollSmall, ClockSmall, UsersSmall, XSmall, CheckSmall, PlusSmall } from '../components/Icons'
 import { motion, AnimatePresence } from 'framer-motion'
-import { stagger, slideRight } from '../theme/anim'
+import { slideRight, popIn, EASE_SNAPPY, snapSpring } from '../theme/anim'
 import { DateTime } from 'luxon'
 
 type View = 'list' | 'calendar' | 'free'
@@ -102,25 +102,37 @@ function groupEventsByDay(events: PublicEvent[], tz: string) {
 
 function ViewToggle({ view, setView }: { view: View; setView: (v: View) => void }) {
   return (
-    <div className="flex rounded-lg border border-border bg-surface-alt/60 p-0.5">
+    <div className="relative flex rounded-lg border border-border bg-surface-alt/60 p-0.5">
       {([
         { key: 'list', label: 'List', icon: <ListSmall /> },
         { key: 'calendar', label: 'Calendar', icon: <CalendarGridSmall /> },
         { key: 'free', label: 'Free', icon: <SunSmall /> },
-      ] as const).map((opt) => (
-        <button
-          key={opt.key}
-          type="button"
-          onClick={() => setView(opt.key)}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            view === opt.key ? 'bg-card text-content shadow-sm' : 'text-content-muted hover:text-content'
-          }`}
-          aria-pressed={view === opt.key}
-        >
-          {opt.icon}
-          {opt.label}
-        </button>
-      ))}
+      ] as const).map((opt) => {
+        const active = view === opt.key
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => setView(opt.key)}
+            className={`relative flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              active ? 'text-content' : 'text-content-muted hover:text-content'
+            }`}
+            aria-pressed={active}
+          >
+            {active && (
+              <motion.span
+                layoutId="view-pill"
+                className="absolute inset-0 rounded-md bg-card shadow-sm"
+                transition={{ type: 'spring', stiffness: 800, damping: 46, mass: 0.5 }}
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-1.5">
+              {opt.icon}
+              {opt.label}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -302,14 +314,15 @@ export default function PublicSharePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: EASE_SNAPPY }}
             onClick={() => setSelected(null)}
           >
             <motion.div
+              variants={popIn}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="card w-full max-w-sm overflow-hidden"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -347,7 +360,7 @@ export default function PublicSharePage() {
         )}
       </AnimatePresence>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card mb-6 p-5">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: EASE_SNAPPY }} className="card mb-6 p-5">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-3 border-b border-border bg-accent/5 px-5 py-4">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
             <CalendarSmall />
@@ -380,9 +393,10 @@ export default function PublicSharePage() {
           {view === 'list' ? (
             <motion.div
               key="list"
-              variants={stagger}
-              initial="hidden"
-              animate="visible"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: EASE_SNAPPY }}
               className="max-h-[60vh] overflow-y-auto divide-y divide-border"
             >
               {groupEventsByDay(data.events, data.timezone).map(([day, dayEvents]) => (
@@ -423,8 +437,14 @@ export default function PublicSharePage() {
               )}
             </motion.div>
 ) : view === 'calendar' ? (
-            <Calendar
+            <motion.div
               key="calendar"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: EASE_SNAPPY }}
+            >
+            <Calendar
               events={calendarEvents}
               startDate={rangeStart}
               endDate={rangeEnd}
@@ -449,8 +469,16 @@ export default function PublicSharePage() {
                 )
               }}
             />
+            </motion.div>
           ) : (
-            <div key="free" className="max-h-[60vh] overflow-y-auto divide-y divide-border">
+            <motion.div
+              key="free"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16, ease: EASE_SNAPPY }}
+              className="max-h-[60vh] overflow-y-auto divide-y divide-border"
+            >
               {freeLoading && (
                 <p className="px-5 py-8 text-center text-content-muted">Loading free times…</p>
               )}
@@ -476,7 +504,7 @@ export default function PublicSharePage() {
                   </div>
                 </div>
               ))}
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
@@ -612,14 +640,15 @@ export default function PublicSharePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: EASE_SNAPPY }}
             onClick={() => setShowVoter(false)}
           >
             <motion.div
+              variants={popIn}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="card w-full max-w-sm overflow-hidden p-5"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-2">
@@ -671,14 +700,15 @@ export default function PublicSharePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: EASE_SNAPPY }}
             onClick={() => { setShowAddCalendar(false); setAddCalendarError(null) }}
           >
             <motion.div
+              variants={popIn}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="card w-full max-w-sm overflow-hidden p-5"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-2">

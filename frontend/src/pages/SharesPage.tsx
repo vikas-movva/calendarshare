@@ -2,7 +2,7 @@ import { useMe, useShares, useRevokeShare } from '../hooks/queries'
 import { CopySmall, TrashSmall, EyeSmall, CheckSmall, PollSmall } from '../components/Icons'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { fadeUp, stagger, slideRight } from '../theme/anim'
+import { fadeUp, stagger, slideRight, EASE_SNAPPY } from '../theme/anim'
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 const ONE_HOUR = 60 * 60 * 1000
@@ -87,9 +87,9 @@ function CopyButton({
         onClick={handleCopy}
         title={tooltip}
   aria-label={tooltip}
-        whileHover={{ scale: disabled ? 1 : 1.08 }}
-        whileTap={{ scale: disabled ? 1 : 0.8 }}
-        transition={{ duration: 0.15 }}
+        whileHover={{ scale: disabled ? 1 : 1.06 }}
+        whileTap={{ scale: disabled ? 1 : 0.82 }}
+        transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.55 }}
         className={`relative grid h-8 w-8 place-items-center overflow-hidden rounded-lg border border-border text-content-muted hover:bg-card ${
           unavailable ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : ''
         } ${failed ? 'border-red-500/40 text-red-400' : ''}`}
@@ -102,7 +102,7 @@ function CopyButton({
               initial={{ scale: 0.4, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.4, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.14, ease: EASE_SNAPPY }}
             >
               <CheckSmall />
             </motion.span>
@@ -113,7 +113,7 @@ function CopyButton({
               initial={{ scale: 0.4, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.4, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.14, ease: EASE_SNAPPY }}
               title="Copy unavailable"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
@@ -129,7 +129,7 @@ function CopyButton({
               initial={{ scale: 0.4, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.4, opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.14, ease: EASE_SNAPPY }}
             >
               <CopySmall />
             </motion.span>
@@ -142,7 +142,7 @@ function CopyButton({
             initial={{ opacity: 0, x: -6 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -6 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.14, ease: EASE_SNAPPY }}
             className="text-xs font-medium text-green-400"
           >
             Copied!
@@ -211,10 +211,10 @@ export default function SharesPage() {
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 24 }}
-            transition={{ duration: 0.25 }}
+            exit={{ opacity: 0, y: 18 }}
+            transition={{ duration: 0.18, ease: EASE_SNAPPY }}
             className="pointer-events-none fixed inset-x-0 z-50 flex justify-center px-4 pb-6"
           >
             <div

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../theme/useTheme'
 import { themes, themeOrder, themeLabels, type ThemeName } from '../theme/theme'
+import { EASE_SNAPPY, snapSpring } from '../theme/anim'
 
 export default function ThemeControls({
   variant = 'desktop',
@@ -33,8 +34,9 @@ export default function ThemeControls({
       <motion.button
         type="button"
         onClick={toggleMode}
-        whileHover={{ scale: 1.1 }}
+        whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.9 }}
+        transition={snapSpring()}
         aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         className="p-2 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -45,7 +47,7 @@ export default function ThemeControls({
             initial={{ opacity: 0, rotate: -90, scale: 0.6 }}
             animate={{ opacity: 1, rotate: 0, scale: 1 }}
             exit={{ opacity: 0, rotate: 90, scale: 0.6 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.16, ease: EASE_SNAPPY }}
             className="block"
           >
             {mode === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -57,8 +59,9 @@ export default function ThemeControls({
         <motion.button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          whileHover={{ scale: 1.1 }}
+          whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.9 }}
+          transition={snapSpring()}
           aria-haspopup="true"
           aria-expanded={open}
           aria-label="Choose accent colour"
@@ -72,10 +75,10 @@ export default function ThemeControls({
           {open && (
             <motion.div
               id="accent-popover"
-              initial={{ opacity: 0, y: -8, scale: 0.95 }}
+              initial={{ opacity: 0, y: -6, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
+              exit={{ opacity: 0, y: -6, scale: 0.96 }}
+              transition={{ duration: 0.12, ease: EASE_SNAPPY }}
               role="menu"
               aria-label="Accent colour"
               className="absolute right-0 mt-2 z-50 w-44 max-w-[calc(100vw-2rem)] p-3 rounded-xl bg-surface border border-border shadow-2xl shadow-black/40 flex flex-col gap-1"
@@ -93,8 +96,9 @@ export default function ThemeControls({
                       aria-label={themeLabels[name]}
                       title={themeLabels[name]}
                       onClick={() => { setAccent(name); setOpen(false) }}
-                      whileHover={{ scale: 1.15 }}
-                      whileTap={{ scale: 0.9 }}
+                      whileHover={{ scale: 1.12 }}
+                      whileTap={{ scale: 0.88 }}
+                      transition={snapSpring()}
                       className={`relative h-7 w-7 rounded-full flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:ring-accent ${
                         active ? 'ring-2 ring-white ring-offset-1 ring-offset-surface' : ''
                       }`}

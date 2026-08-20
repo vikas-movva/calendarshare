@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMe, useCalendars, useCreateShare, useCreatePoll } from '../hooks/queries'
 import { CalendarSmall, CopySmall, ArrowLeftSmall, PollSmall } from '../components/Icons'
 import { motion } from 'framer-motion'
-import { fadeUp, stagger } from '../theme/anim'
+import { fadeUp, stagger, EASE_SNAPPY } from '../theme/anim'
 
 const VISIBILITY_OPTIONS = [
   { value: 'busy', label: 'Minimal', description: 'Only start and end times' },
@@ -159,7 +159,7 @@ export default function NewSharePage() {
   if (result) {
     return (
       <div className="mx-auto max-w-xl">
-        <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="card overflow-hidden">
+        <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SNAPPY }} className="card overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border bg-accent/5 px-5 py-4">
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-accent/10 text-accent">
               <CalendarSmall />
@@ -175,7 +175,7 @@ export default function NewSharePage() {
               <span className="min-w-0 flex-1 break-all text-sm font-medium text-content">{result.url}</span>
               <button
                 onClick={() => navigator.clipboard.writeText(result.url)}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-on-accent hover:bg-accent-hover"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-on-accent transition-transform hover:bg-accent-hover active:scale-90"
                 title="Copy link"
               >
                 <CopySmall />

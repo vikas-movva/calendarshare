@@ -24,7 +24,7 @@ import './calendar.css';
 /** Reference rows considered "one month" — used to size row height + scrolling. */
 const MONTH_ROWS = 6;
 /** Total month height budget before it is split across the visible rows. */
-const MONTH_HEIGHT = 50; // vh — hosts can override via --mc-month-height
+const MONTH_HEIGHT = 65; // vh — hosts can override via --mc-month-height
 
 export function Calendar({
   events,
