@@ -234,3 +234,61 @@ pub async fn delete_poll_vote(
         .await?;
     Ok(res.rows_affected() > 0)
 }
+
+/// Reconcile a poll's slots with a newly computed set of free slots.
+///
+/// When a share's events change (e.g. a collaborator adds their calendar), the
+/// share's free times are recomputed and every existing poll must reflect the
+/// new free times. Slots are matched by (start, end): a slot whose time window
+/// is unchanged is kept (preserving any votes already cast on it), a free slot
+/// with no matching poll slot is inserted, and a poll slot that no longer
+/// corresponds to a free window is removed (which cascades to its votes).
+pub async fn reconcile_poll_slots_with_free_slots(
+    pool: &crate::db::PgPool,
+    poll_id: Uuid,
+    free_slots: &[crate::shares::models::FreeSlot],
+) -> sqlx::Result<()> {
+    let existing = list_poll_slots(pool, poll_id).await?;
+
+    // Index existing slots by their (start, end) window so rows whose windows
+    // are still free can be preserved (along with any votes already cast).
+    let existing_ids_by_window: std::collections::HashMap<
+        (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>),
+        Uuid,
+    > = existing
+        .iter()
+        .map(|s| ((s.start_time, s.end_time), s.id))
+        .collect();
+
+    let mut tx = pool.begin().await?;
+
+    let mut keep_ids: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    for slot in free_slots {
+        if let Some(id) = existing_ids_by_window.get(&(slot.start, slot.end)) {
+            keep_ids.insert(*id);
+        } else {
+            sqlx::query(
+                "INSERT INTO poll_slots (id, poll_id, start_time, end_time) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(poll_id)
+            .bind(slot.start)
+            .bind(slot.end)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
+    // Remove any existing slot whose window is no longer free (votes cascade).
+    for row in &existing {
+        if !keep_ids.contains(&row.id) {
+            sqlx::query("DELETE FROM poll_slots WHERE id = $1")
+                .bind(row.id)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+
+    tx.commit().await?;
+    Ok(())
+}

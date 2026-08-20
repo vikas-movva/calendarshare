@@ -514,6 +514,24 @@ impl<S: TokenService> ShareService<S> {
 
         let projected = self.project_events(&share, &existing).await?;
 
+        // The merged events change the share's free times, so recompute them
+        // and refresh every existing poll on the share to match. This is what
+        // keeps polls in sync when a collaborator adds their calendar.
+        let free_slots = compute_free_slots(
+            share.start_time,
+            share.end_time,
+            &projected,
+            &share.timezone,
+        );
+        let poll_service = crate::polls::service::PollService::new(self.pool.clone());
+        poll_service
+            .refresh_polls_for_share(share_id, &free_slots)
+            .await
+            .map_err(|e| match e {
+                crate::error::AppError::InternalError(m) => m,
+                other => format!("{:?}", other),
+            })?;
+
         Ok((share, projected))
     }
 

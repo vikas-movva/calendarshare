@@ -49,6 +49,22 @@ impl PollService {
         Ok(out)
     }
 
+    /// Refresh every poll for a share so its slots match a newly recomputed
+    /// set of free slots (e.g. after a collaborator adds their calendar).
+    /// Returns the updated polls. Existing slots whose time window is still
+    /// free are preserved along with their votes.
+    pub async fn refresh_polls_for_share(
+        &self,
+        share_id: Uuid,
+        free_slots: &[FreeSlot],
+    ) -> crate::polls::AppErrorResult<Vec<Poll>> {
+        let poll_rows = store::list_polls_for_share(&self.pool, share_id).await?;
+        for row in &poll_rows {
+            store::reconcile_poll_slots_with_free_slots(&self.pool, row.id, free_slots).await?;
+        }
+        self.list_polls_for_share(share_id).await
+    }
+
     pub async fn vote(
         &self,
         slot_id: Uuid,
